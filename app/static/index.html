@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Assistant Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #chat-container {
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+        .assistant-message {
+            background-color: #f5f5f5;
+            margin-right: 20%;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border-radius: 5px;
+            position: relative;
+        }
+
+        .close-button {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        /* Command reference styles */
+        #command-reference {
+            margin-top: 30px;
+            padding: 20px;
+            border-top: 2px solid #eee;
+            font-size: 0.9em;
+        }
+
+        .command-section {
+            margin-bottom: 20px;
+        }
+
+        .command-section h2 {
+            color: #2962ff;
+            border-bottom: 1px solid #2962ff;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .command {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 5px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+
+        .examples {
+            margin-left: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        /* Add help button */
+        #help-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #2962ff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #help-button:hover {
+            background-color: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Assistant Chat</h1>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="message-input" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+    <button id="help-button" onclick="showHelp()">Help (?)</button>
+
+    <!-- Command Reference Section -->
+    <div id="command-reference">
+        <h2>Available Commands</h2>
+        
+        <div class="command-section">
+            <h2>🗓️ Calendar</h2>
+            <div class="command">/calendar list</div>
+            <div class="command">/calendar add "Title" "Time" ["End Time"] ["Description"] ["Location"] [--recurring daily/weekly/monthly/yearly]</div>
+            <div class="examples">
+                Examples:<br>
+                <code>/calendar add "Team Meeting" "tomorrow at 2pm"</code><br>
+                <code>/calendar add "Weekly Standup" "monday 9am" --recurring weekly</code>
+            </div>
+        </div>
+
+        <div class="command-section">
+            <h2>✅ Todo List</h2>
+            <div class="command">/todo add "Task" [--priority high/medium/low] [--category name] [--due "date"] ["notes"]</div>
+            <div class="command">/todo list [category] [--priority high/medium/low]</div>
+            <div class="command">/todo done &lt;todo_id&gt;</div>
+            <div class="command">/todo delete &lt;todo_id&gt;</div>
+            <div class="examples">
+                <code>/todo add "Buy groceries" --category personal</code><br>
+                <code>/todo add "Write docs" --priority high --due "friday 5pm"</code>
+            </div>
+        </div>
+
+        <div class="command-section">
+            <h2>🧠 Memory</h2>
+            <div class="command">/addfact [category:] &lt;fact&gt;</div>
+            <div class="command">/listfacts [category]</div>
+            <div class="command">/deletefact &lt;fact_id&gt;</div>
+        </div>
+
+        <div class="command-section">
+            <h2>💡 Tips</h2>
+            <ul>
+                <li>Use quotes for text with spaces</li>
+                <li>Times can be natural language like "tomorrow at 2pm"</li>
+                <li>Categories help organize your todos and facts</li>
+            </ul>
+        </div>
+
+        <div class="command-section">
+            <h2>📧 Email</h2>
+            <div class="command">/email list [search query]</div>
+            <div class="command">/email send "recipient@email.com" "Subject" "Body"</div>
+            <div class="command">/email reply &lt;email_id&gt; "Reply message"</div>
+            <div class="examples">
+                <code>/email list unread</code><br>
+                <code>/email send "john@example.com" "Meeting Notes" "Here are the notes..."</code>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+
+        function addMessage(message, isUser) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+            messageDiv.textContent = message;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addMessage(message, true);
+            messageInput.value = '';
+
+            try {
+                const response = await fetch(`/chat?message=${encodeURIComponent(message)}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                // Add assistant response to chat
+                addMessage(data.response, false);
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Error: Could not get response', false);
+            }
+        }
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Help modal functions
+        function showHelp() {
+            document.getElementById('help-modal').style.display = 'block';
+        }
+
+        function hideHelp() {
+            document.getElementById('help-modal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('help-modal')) {
+                hideHelp();
+            }
+        }
+
+        // Add keyboard shortcut for help (press 'h' key)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'h' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                if (document.activeElement !== messageInput) {
+                    showHelp();
+                }
+            } else if (e.key === 'Escape') {
+                hideHelp();
+            }
+        });
+    </script>
+</body>
+</html> 
