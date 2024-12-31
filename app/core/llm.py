@@ -2,11 +2,13 @@ from langchain_ollama import OllamaLLM
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from .memory import MemoryManager
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
 from .calendar_manager import CalendarManager
 from .todo_manager import TodoManager
 from .gmail_manager import GmailManager
 from .email_handler import EmailHandler
+import pytz
 
 class LLMManager:
     def __init__(self):
@@ -17,13 +19,133 @@ class LLMManager:
             temperature=0.7,
         )
         self.memory = MemoryManager()
-        self.calendar = CalendarManager()  # Re-enable calendar
+        self.calendar = CalendarManager()
         self.todos = TodoManager()
         self.gmail = GmailManager()
         self.email_handler = EmailHandler()
+        
+        # Set timezone and current time context
+        self.timezone = 'America/Edmonton'  # Your local timezone
+        self.current_time = datetime.now(pytz.timezone(self.timezone))
+        
+        # Add this information to memory
+        self.memory.add_long_term_fact(
+            f"Current timezone is {self.timezone}",
+            "system"
+        )
+        self.memory.add_long_term_fact(
+            f"All times should be interpreted in {self.timezone} timezone",
+            "system"
+        )
 
     async def generate_response(self, prompt: str, context: dict = None) -> str:
         try:
+            # Update current time on each request
+            self.current_time = datetime.now(pytz.timezone(self.timezone))
+            
+            # Check for calendar intents
+            calendar_keywords = [
+                "schedule", "appointment", "book", "calendar", "meeting",
+                "remind me", "set up", "plan for", "mark down"
+            ]
+            calendar_query_keywords = [
+                "what", "when", "show", "list", "tell me", "do i have",
+                "what's", "what is", "what are", "any", "upcoming"
+            ]
+            time_indicators = ["today", "tomorrow", "tonight", "pm", "am", "next", "on", "at",
+                             "this week", "next week", "weekend", "month"]
+            
+            # Check if this is a calendar query
+            if any(keyword in prompt.lower() for keyword in calendar_query_keywords) and \
+               any(indicator in prompt.lower() for indicator in time_indicators):
+                
+                # Determine if query is about tomorrow
+                is_tomorrow_query = "tomorrow" in prompt.lower()
+                target_date = self.current_time + timedelta(days=1) if is_tomorrow_query else self.current_time
+                
+                # Ask LLM to convert natural query to calendar list command
+                query_prompt = f"""
+You are a calendar assistant. TODAY is {self.current_time.strftime('%A, %B %d, %Y')} and the current time is {self.current_time.strftime('%I:%M %p')} {self.timezone}.
+
+Answer this calendar query about {"tomorrow" if is_tomorrow_query else "today"}:
+"{prompt}"
+
+Events for {"tomorrow" if is_tomorrow_query else "today"}:
+{self._filter_events_by_date(self.calendar.list_upcoming_events(), target_date)}
+
+Rules:
+1. ALWAYS start by mentioning today's actual date ({self.current_time.strftime('%A, %B %d, %Y')})
+2. When discussing tomorrow, mention it's {target_date.strftime('%A, %B %d, %Y')}
+3. Only show events that are actually scheduled for the requested date
+4. Format all times in {self.timezone} timezone
+5. If no events found for the requested date, explicitly say so
+6. Be concise but friendly
+7. List events in chronological order
+
+Example response formats:
+For today: "Today is Tuesday, December 31, 2024. You have no events scheduled for today."
+For tomorrow: "Today is Tuesday, December 31, 2024. For tomorrow (Wednesday, January 1, 2025) you have: Meeting at 2 PM MST"
+"""
+                response = await self.llm.agenerate([query_prompt])
+                return response.generations[0][0].text.strip()
+
+            # Existing calendar creation intent check
+            elif any(keyword in prompt.lower() for keyword in calendar_keywords) and \
+                 any(indicator in prompt.lower() for indicator in time_indicators):
+                
+                # Ask LLM to convert natural language to calendar command
+                command_prompt = f"""
+Convert this calendar request into a /calendar add command:
+"{prompt}"
+
+Current time context:
+- Current time: {self.current_time.strftime('%I:%M %p, %B %d, %Y')}
+- Timezone: {self.timezone}
+
+Rules:
+1. Format: /calendar add "Title" "Start Time" "End Time" "Location" "Description"
+2. Include all available information from the request
+3. Use specific date/time formats with timezone
+4. All times should be in {self.timezone}
+5. Respond ONLY with the command, no other text
+
+Example:
+Request: "Schedule a meeting with John tomorrow at 2pm for 1 hour"
+/calendar add "Meeting with John" "2:00 PM MST tomorrow" "3:00 PM MST tomorrow" "" "One hour meeting"
+"""
+                response = await self.llm.agenerate([command_prompt])
+                calendar_command = response.generations[0][0].text.strip()
+                
+                # Parse the command to show confirmation
+                params = self._extract_quoted_params(calendar_command)
+                if len(params) >= 2:
+                    confirmation = f"""
+I'll create this calendar event:
+- Title: {params[0]}
+- Start: {params[1]}
+{f"- End: {params[2]}" if len(params) > 2 else ""}
+{f"- Location: {params[3]}" if len(params) > 3 else ""}
+{f"- Description: {params[4]}" if len(params) > 4 else ""}
+
+Would you like me to add this event? (Reply with yes/no)
+"""
+                    # Store the command for later execution
+                    self.pending_calendar_command = calendar_command
+                    return confirmation
+                
+                return "I had trouble understanding the calendar details. Please try again."
+
+            # Add a new condition to handle the confirmation response
+            elif hasattr(self, 'pending_calendar_command') and prompt.lower() in ['yes', 'y']:
+                # Execute the stored command
+                command = self.pending_calendar_command
+                delattr(self, 'pending_calendar_command')
+                return await self._handle_command(command)
+
+            elif hasattr(self, 'pending_calendar_command') and prompt.lower() in ['no', 'n']:
+                delattr(self, 'pending_calendar_command')
+                return "Calendar event cancelled."
+
             # Command handling
             if prompt.startswith("/"):
                 return await self._handle_command(prompt)
@@ -38,7 +160,7 @@ class LLMManager:
             if context and 'file' in context:
                 file_context = f"\nCurrent file: {context['file']}\nContent: {context.get('content', 'Not provided')}"
             
-            # Create context-aware prompt
+            # Create context-aware prompt with specific instructions about calendar actions
             context_prompt = f"""
 You are a helpful AI assistant with access to the following context:
 
@@ -53,7 +175,7 @@ RECENT CONVERSATION HISTORY:
 
 Current message: {prompt}
 
-Please respond to the current message while taking into account all available context. 
+Please respond to the current message while taking into account all available context.
 If you learn any new personal information, remember it for future reference.
 """
             response = await self.llm.agenerate([context_prompt])
@@ -103,52 +225,45 @@ If you learn any new personal information, remember it for future reference.
             return "Press the Help (?) button in the bottom right or press 'h' to see all available commands and examples."
 
         elif command == "/calendar":
-            subcommand = parts[1] if len(parts) > 1 else "list"
-            
-            if subcommand == "add":
-                try:
-                    # Extract quoted parameters
-                    params = self._extract_quoted_params(prompt)
-                    if len(params) < 2:
-                        return "Please provide at least a title and start time in quotes"
-                    
-                    summary = params[0]
-                    start_time = params[1]
-                    end_time = params[2] if len(params) > 2 else None
-                    description = params[3] if len(params) > 3 else None
-                    location = params[4] if len(params) > 4 else None
-                    
-                    # Check for recurrence flag
-                    recurrence = None
-                    if "--recurring" in prompt.lower():
-                        for pattern in ["daily", "weekly", "monthly", "yearly"]:
-                            if pattern in prompt.lower():
-                                recurrence = pattern
-                                break
-                    
-                    event_id = self.calendar.create_event(
-                        summary=summary,
-                        start_time=start_time,
-                        end_time=end_time,
-                        description=description,
-                        location=location,
-                        recurrence=recurrence
-                    )
-                    
-                    recurrence_msg = f" ({recurrence})" if recurrence else ""
-                    return f"Created calendar event: {summary}{recurrence_msg} (ID: {event_id})"
-                except Exception as e:
-                    return f"Error creating event: {str(e)}"
-            
-            elif subcommand == "list":
-                events = self.calendar.list_upcoming_events()
-                if not events:
-                    return "No upcoming events found."
+            if len(parts) > 1:
+                subcommand = parts[1].lower()
                 
-                return "Upcoming events:\n" + "\n".join(
-                    f"- {event['summary']} ({event['start'].get('dateTime', event['start'].get('date'))})"
-                    for event in events
-                )
+                if subcommand == "add":
+                    # Handle the direct calendar add command
+                    try:
+                        # Extract the quoted parameters
+                        params = self._extract_quoted_params(prompt)
+                        if len(params) < 2:
+                            return "Please provide at least a title and start time in quotes"
+                        
+                        summary = params[0]
+                        start_time = params[1]
+                        end_time = params[2] if len(params) > 2 else None
+                        location = params[3] if len(params) > 3 else None
+                        description = params[4] if len(params) > 4 else None
+                        
+                        # Create the event directly
+                        event_id = self.calendar.create_event(
+                            summary=summary,
+                            start_time=start_time,
+                            end_time=end_time,
+                            location=location,
+                            description=description
+                        )
+                        
+                        return f"Successfully created calendar event: {summary}\nUse /calendar list to verify."
+                    except Exception as e:
+                        return f"Error creating calendar event: {str(e)}"
+                        
+                elif subcommand == "list":
+                    events = self.calendar.list_upcoming_events()
+                    if not events:
+                        return "No upcoming events found."
+                    
+                    return "Upcoming events:\n" + "\n".join(
+                        f"- {event['summary']} ({event['start'].get('dateTime', event['start'].get('date'))})"
+                        for event in events
+                    )
 
         elif command == "/todo":
             subcommand = parts[1] if len(parts) > 1 else "list"
@@ -255,3 +370,24 @@ If you learn any new personal information, remember it for future reference.
         """Extract parameters enclosed in quotes."""
         import re
         return re.findall(r'"([^"]*)"', text) 
+
+    def _filter_events_by_date(self, events, target_date):
+        """Filter events to only include those on the specified date."""
+        filtered = []
+        target_date = target_date.date()
+        
+        for event in events:
+            event_time = event.get('start', {}).get('dateTime')
+            event_date = event.get('start', {}).get('date')
+            
+            if event_time:
+                # Convert to timezone-aware datetime
+                event_datetime = datetime.fromisoformat(event_time.replace('Z', '+00:00'))
+                event_datetime = event_datetime.astimezone(pytz.timezone(self.timezone))
+                if event_datetime.date() == target_date:
+                    filtered.append(event)
+            elif event_date and datetime.fromisoformat(event_date).date() == target_date:
+                filtered.append(event)
+        
+        return filtered 
+ 
