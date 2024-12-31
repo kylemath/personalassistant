@@ -24,6 +24,11 @@ class CalendarManager:
         self.credentials_path = 'app/config/credentials.json'
         self.token_path = 'calendar_token.pickle'  # Separate token file
         self._authenticate()
+        
+        # Add additional calendars
+        self.additional_calendars = {
+            "Soccer": "https://calendar.sportsyou.com/access/us-7e6fe0f1-8b2a-4e8d-b27b-686b1b8cb400/7bf5e873-2f8c-4d60-b0b5-390b06f89cbf"
+        }
 
     def _authenticate(self):
         try:
@@ -113,10 +118,69 @@ class CalendarManager:
         except Exception as e:
             raise Exception(f"Failed to create event: {str(e)}")
 
-    def list_upcoming_events(self, max_results=10):
+    def _get_google_events(self, max_results=10):
+        """Get events from all accessible Google calendars."""
         now = datetime.utcnow().isoformat() + 'Z'
-        events_result = self.service.events().list(
-            calendarId='primary', timeMin=now,
-            maxResults=max_results, singleEvents=True,
-            orderBy='startTime').execute()
-        return events_result.get('items', []) 
+        all_events = []
+        
+        # Calendars to exclude
+        excluded_calendars = ['Weather', 'Holidays in United States', 'Jewish Holidays', 'Edmonton Oilers']
+
+        try:
+            # First, get list of all calendar IDs
+            calendar_list = self.service.calendarList().list().execute()
+            
+            # Fetch events from each calendar
+            for calendar_entry in calendar_list['items']:
+                cal_id = calendar_entry['id']
+                cal_name = calendar_entry['summary']
+                
+                # Skip excluded calendars
+                if cal_name in excluded_calendars:
+                    continue
+                    
+                try:
+                    # Get events from each calendar (don't limit here)
+                    events_result = self.service.events().list(
+                        calendarId=cal_id,
+                        timeMin=now,
+                        maxResults=100,  # Get more events to ensure we have enough after merging
+                        singleEvents=True,
+                        orderBy='startTime'
+                    ).execute()
+                    
+                    # Add calendar source to each event
+                    for event in events_result.get('items', []):
+                        if 'summary' not in event:
+                            event['summary'] = 'Untitled Event'
+                        event['calendar'] = cal_name
+                        all_events.append(event)
+                        
+                except Exception as e:
+                    print(f"Error fetching events from calendar {cal_name}: {e}")
+                    continue
+                    
+            return all_events
+        
+        except Exception as e:
+            print(f"Error listing calendars: {e}")
+            return []
+
+    def list_upcoming_events(self, max_results=10):
+        """List upcoming events from all calendars."""
+        try:
+            # Get all events first
+            events = self._get_google_events(max_results)
+            
+            # Sort all events
+            def event_sort_key(event):
+                start = event.get('start', {})
+                return start.get('dateTime') or start.get('date') or ''
+            
+            # Sort and limit only at the end
+            sorted_events = sorted(events, key=event_sort_key)
+            return sorted_events[:max_results]  # Apply limit here
+            
+        except Exception as e:
+            print(f"Error in list_upcoming_events: {e}")
+            return []

@@ -25,10 +25,13 @@ class LLMManager:
         self.email_handler = EmailHandler()
         
         # Set timezone and current time context
-        self.timezone = 'America/Edmonton'  # Your local timezone
+        self.timezone = 'America/Edmonton'
         self.current_time = datetime.now(pytz.timezone(self.timezone))
         
-        # Add this information to memory
+        # Clean up any duplicate facts
+        self.memory.cleanup_duplicates()
+        
+        # Add timezone facts (add_long_term_fact will now prevent duplicates)
         self.memory.add_long_term_fact(
             f"Current timezone is {self.timezone}",
             "system"
@@ -37,6 +40,32 @@ class LLMManager:
             f"All times should be interpreted in {self.timezone} timezone",
             "system"
         )
+
+    def _cleanup_timezone_facts(self):
+        """Remove duplicate timezone facts."""
+        facts = self.memory.list_facts('system')
+        seen_facts = set()
+        for fact in facts:
+            if 'timezone' in fact.lower():
+                fact_id = fact.split(']')[0].strip('[')  # Extract fact ID
+                if fact in seen_facts:
+                    self.memory.delete_fact(fact_id)
+                else:
+                    seen_facts.add(fact)
+
+    def _ensure_timezone_facts(self):
+        """Ensure timezone facts exist, add if missing."""
+        facts = self.memory.list_facts('system')
+        timezone_fact = f"Current timezone is {self.timezone}"
+        interpretation_fact = f"All times should be interpreted in {self.timezone} timezone"
+        
+        has_timezone = any(timezone_fact in fact for fact in facts)
+        has_interpretation = any(interpretation_fact in fact for fact in facts)
+        
+        if not has_timezone:
+            self.memory.add_long_term_fact(timezone_fact, "system")
+        if not has_interpretation:
+            self.memory.add_long_term_fact(interpretation_fact, "system")
 
     async def generate_response(self, prompt: str, context: dict = None) -> str:
         try:
@@ -59,6 +88,56 @@ class LLMManager:
             if any(keyword in prompt.lower() for keyword in calendar_query_keywords) and \
                any(indicator in prompt.lower() for indicator in time_indicators):
                 
+                # Get all upcoming events first
+                events = self.calendar.list_upcoming_events(max_results=20)  # Get enough events to search through
+                
+                # If looking for "next" event
+                if "next" in prompt.lower():
+                    # Parse what we're looking for
+                    search_terms = []
+                    if "practice" in prompt.lower():
+                        search_terms.append("practice")
+                    if "game" in prompt.lower():
+                        search_terms.append("game")
+                    
+                    # Add all soccer team calendars
+                    if any(team in prompt.lower() for team in ["juventus", "pirates", "beer hunters", "pirates sc"]):
+                        if "juventus" in prompt.lower():
+                            search_terms.append("juventus")
+                        if "pirates" in prompt.lower() or "pirates sc" in prompt.lower():
+                            search_terms.append("pirates sc")
+                        if "beer" in prompt.lower() or "beer hunters" in prompt.lower():
+                            search_terms.append("beer hunters")
+                    
+                    # Find the next matching event
+                    for event in events:
+                        summary = event.get('summary', '').lower()
+                        calendar = event.get('calendar', '').lower()
+                        
+                        if any(term in summary.lower() or term in calendar.lower() for term in search_terms):
+                            # Convert the datetime to local timezone
+                            start_time = event['start'].get('dateTime', event['start'].get('date'))
+                            event_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                            local_dt = event_dt.astimezone(pytz.timezone(self.timezone))
+                            
+                            # Format the date and time naturally
+                            day_str = local_dt.strftime('%A')
+                            date_str = local_dt.strftime('%B %d')
+                            time_str = local_dt.strftime('%I:%M %p').lstrip('0').lower()
+                            
+                            # Calculate if it's "this" or "next" week
+                            today = self.current_time
+                            days_until = (local_dt.date() - today.date()).days
+                            week_qualifier = "this coming" if days_until < 7 else "next"
+                            
+                            # Get location if available
+                            location = event.get('location', '')
+                            location_str = f" at {location}" if location else ""
+                            
+                            return f"The next {event['summary'].lower()} is {week_qualifier} {day_str}, {date_str} at {time_str}{location_str} [{event.get('calendar', 'Primary')}]"
+                    
+                    return f"No upcoming {' or '.join(search_terms)} found in the calendar."
+
                 # Determine if query is about tomorrow
                 is_tomorrow_query = "tomorrow" in prompt.lower()
                 target_date = self.current_time + timedelta(days=1) if is_tomorrow_query else self.current_time
@@ -256,14 +335,27 @@ If you learn any new personal information, remember it for future reference.
                         return f"Error creating calendar event: {str(e)}"
                         
                 elif subcommand == "list":
-                    events = self.calendar.list_upcoming_events()
+                    # Get optional number of events parameter
+                    max_results = 10  # default
+                    if len(parts) > 2:
+                        try:
+                            max_results = int(parts[2])
+                        except ValueError:
+                            return "Please provide a valid number for the amount of events to show"
+                    
+                    events = self.calendar.list_upcoming_events(max_results)
                     if not events:
                         return "No upcoming events found."
                     
-                    return "Upcoming events:\n" + "\n".join(
-                        f"- {event['summary']} ({event['start'].get('dateTime', event['start'].get('date'))})"
+                    response = f"Next {len(events)} upcoming events:\n" + "\n".join(
+                        f"- {event['summary']} ({event['start'].get('dateTime', event['start'].get('date'))}) [{event.get('calendar', 'Primary')}]"
                         for event in events
                     )
+                    
+                    if len(events) == max_results:
+                        response += f"\n\nTo see more events, use: /calendar list <number>"
+                    
+                    return response
 
         elif command == "/todo":
             subcommand = parts[1] if len(parts) > 1 else "list"

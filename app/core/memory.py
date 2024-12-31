@@ -39,26 +39,24 @@ class MemoryManager:
             ids=[f"personal_{category}_{timestamp}"]
         )
     
-    def add_long_term_fact(self, fact: str, category: str = "general"):
-        timestamp = datetime.now().isoformat()
-        fact_id = f"fact_{timestamp}"
-        print(f"Adding fact with ID: {fact_id}")  # Debug print
-        try:
-            self.long_term_memory.add(
-                documents=[fact],
-                metadatas=[{"category": category, "timestamp": timestamp}],
-                ids=[fact_id]
-            )
-            print(f"Successfully added fact: {fact}")  # Debug print
-            
-            # Verify it was added
-            results = self.long_term_memory.query(
-                query_texts=[""],
-                n_results=100
-            )
-            print(f"Current facts: {results}")  # Debug print
-        except Exception as e:
-            print(f"Error adding fact: {e}")
+    def add_long_term_fact(self, fact: str, category: str = "general") -> None:
+        """Add a fact to long-term memory, preventing duplicates."""
+        # First check if this exact fact already exists
+        existing_facts = self.list_facts(category)
+        for existing_fact in existing_facts:
+            # Remove the fact ID and category from comparison
+            clean_existing = existing_fact.split('] ')[1] if '] ' in existing_fact else existing_fact
+            if clean_existing == fact:
+                # Fact already exists, don't add it again
+                return
+        
+        # If we get here, fact doesn't exist, so add it
+        fact_id = f"fact_{datetime.now().isoformat()}"
+        self.long_term_memory.add(
+            documents=[fact],
+            metadatas=[{"category": category, "timestamp": datetime.now().isoformat()}],
+            ids=[fact_id]
+        )
     
     def get_recent_history(self, limit: int = 5) -> str:
         results = self.conversations.query(
@@ -149,3 +147,33 @@ class MemoryManager:
         except Exception as e:
             print(f"Error deleting fact: {e}")
             return False 
+
+    def cleanup_duplicates(self):
+        """Remove duplicate facts while keeping the oldest version."""
+        facts = self.list_facts()
+        seen_facts = {}
+        to_delete = []
+
+        for fact in facts:
+            # Extract the ID and clean fact text
+            fact_id = fact.split(']')[0].strip('[')
+            clean_fact = fact.split('] ')[1] if '] ' in fact else fact
+            
+            if clean_fact in seen_facts:
+                # Keep the older fact, delete the newer one
+                old_timestamp = seen_facts[clean_fact]['timestamp']
+                new_timestamp = fact_id.split('_')[1]
+                if new_timestamp > old_timestamp:
+                    to_delete.append(fact_id)
+                else:
+                    to_delete.append(seen_facts[clean_fact]['id'])
+                    seen_facts[clean_fact] = {'id': fact_id, 'timestamp': new_timestamp}
+            else:
+                seen_facts[clean_fact] = {
+                    'id': fact_id,
+                    'timestamp': fact_id.split('_')[1]
+                }
+
+        # Delete duplicates
+        for fact_id in to_delete:
+            self.delete_fact(fact_id) 
