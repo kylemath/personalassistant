@@ -6,6 +6,7 @@ from datetime import datetime
 from .calendar_manager import CalendarManager
 from .todo_manager import TodoManager
 from .gmail_manager import GmailManager
+from .email_handler import EmailHandler
 
 class LLMManager:
     def __init__(self):
@@ -19,8 +20,9 @@ class LLMManager:
         self.calendar = CalendarManager()  # Re-enable calendar
         self.todos = TodoManager()
         self.gmail = GmailManager()
+        self.email_handler = EmailHandler()
 
-    async def generate_response(self, prompt: str) -> str:
+    async def generate_response(self, prompt: str, context: dict = None) -> str:
         try:
             # Command handling
             if prompt.startswith("/"):
@@ -30,6 +32,11 @@ class LLMManager:
             conversation_history = self.memory.get_recent_history()
             personal_info = self.memory.get_personal_info()
             relevant_facts = self.memory.get_relevant_facts(prompt)
+            
+            # Add file context if provided
+            file_context = ""
+            if context and 'file' in context:
+                file_context = f"\nCurrent file: {context['file']}\nContent: {context.get('content', 'Not provided')}"
             
             # Create context-aware prompt
             context_prompt = f"""
@@ -42,7 +49,7 @@ RELEVANT FACTS AND HISTORY:
 {relevant_facts}
 
 RECENT CONVERSATION HISTORY:
-{conversation_history}
+{conversation_history}{file_context}
 
 Current message: {prompt}
 
@@ -223,56 +230,24 @@ If you learn any new personal information, remember it for future reference.
                 return f"Could not find todo with ID: {todo_id}"
 
         elif command == "/email":
-            subcommand = parts[1] if len(parts) > 1 else "list"
+            if len(parts) < 2:
+                return "Please provide an email command. Available commands: list, read, markread, reply, draft reply, answer, send, revise, discard"
             
-            if subcommand == "list":
-                # Format: /email list [query]
-                query = " ".join(parts[2:]) if len(parts) > 2 else ""
-                emails = self.gmail.list_recent_emails(query=query)
-                if not emails:
-                    return "No emails found."
-                
-                return "Recent Emails:\n" + "\n\n".join(
-                    f"ID: {email['id']}\n"
-                    f"From: {email['from']}\n"
-                    f"Subject: {email['subject']}\n"
-                    f"Preview: {email['snippet']}"
-                    for email in emails
-                )
+            subcommand = parts[1]
+            args = " ".join(parts[2:]) if len(parts) > 2 else ""
+            response = self.email_handler.handle_command(subcommand, args)
             
-            elif subcommand == "send":
-                # Format: /email send "recipient@email.com" "Subject" "Body"
-                try:
-                    params = self._extract_quoted_params(prompt)
-                    if len(params) < 3:
-                        return "Please provide recipient, subject, and body in quotes"
-                    
-                    to, subject, body = params[:3]
-                    if self.gmail.send_email(to, subject, body):
-                        return f"Email sent to {to}"
-                    return "Failed to send email"
-                
-                except Exception as e:
-                    return f"Error sending email: {str(e)}"
+            # Handle different types of responses
+            if subcommand in ["draft", "answer", "revise"]:
+                if "could you tell me:" in response.lower():
+                    return response  # Return the question to the user
+                if "What would you like to do?" in response:
+                    return response  # Return the review options
+                # Generate new draft
+                draft_response = await self.generate_response(response, {"type": "email_draft"})
+                return self.email_handler.set_current_draft(draft_response)
             
-            elif subcommand == "reply":
-                # Format: /email reply <email_id> "Reply message"
-                try:
-                    if len(parts) < 3:
-                        return "Please provide email ID and reply message"
-                    
-                    email_id = parts[2]
-                    params = self._extract_quoted_params(prompt)
-                    if not params:
-                        return "Please provide reply message in quotes"
-                    
-                    reply_text = params[0]
-                    if self.gmail.reply_to_email(email_id, reply_text):
-                        return f"Reply sent to email {email_id}"
-                    return "Failed to send reply"
-                
-                except Exception as e:
-                    return f"Error replying to email: {str(e)}"
+            return response
 
         return f"Unknown command: {command}" 
 

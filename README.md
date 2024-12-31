@@ -71,6 +71,7 @@ A local AI assistant powered by Ollama that integrates with Google Calendar, Gma
 
 3. **In a new terminal Start the web server**
    ```bash
+   source venv/bin/activate
    uvicorn app.main:app --reload
    ```
 

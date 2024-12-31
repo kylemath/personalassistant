@@ -1,14 +1,24 @@
 from chromadb import Client, Settings
 from datetime import datetime
 import json
+from typing import List
 
 class MemoryManager:
     def __init__(self):
+        print("Initializing MemoryManager")  # Debug print
         self.client = Client(Settings(is_persistent=True, persist_directory="data/memory"))
+        print("ChromaDB client created")  # Debug print
+        
+        # List existing collections
+        print(f"Existing collections: {self.client.list_collections()}")  # Debug print
+        
         # Separate collections for different types of memory
         self.conversations = self.client.get_or_create_collection("conversation_history")
         self.personal_info = self.client.get_or_create_collection("personal_info")
         self.long_term_memory = self.client.get_or_create_collection("long_term_facts")
+        
+        # Check collection sizes
+        print(f"Long term memory count: {self.long_term_memory.count()}")  # Debug print
         
     def add_interaction(self, user_message: str, assistant_response: str):
         timestamp = datetime.now().isoformat()
@@ -31,11 +41,24 @@ class MemoryManager:
     
     def add_long_term_fact(self, fact: str, category: str = "general"):
         timestamp = datetime.now().isoformat()
-        self.long_term_memory.add(
-            documents=[fact],
-            metadatas=[{"category": category, "timestamp": timestamp}],
-            ids=[f"fact_{timestamp}"]
-        )
+        fact_id = f"fact_{timestamp}"
+        print(f"Adding fact with ID: {fact_id}")  # Debug print
+        try:
+            self.long_term_memory.add(
+                documents=[fact],
+                metadatas=[{"category": category, "timestamp": timestamp}],
+                ids=[fact_id]
+            )
+            print(f"Successfully added fact: {fact}")  # Debug print
+            
+            # Verify it was added
+            results = self.long_term_memory.query(
+                query_texts=[""],
+                n_results=100
+            )
+            print(f"Current facts: {results}")  # Debug print
+        except Exception as e:
+            print(f"Error adding fact: {e}")
     
     def get_recent_history(self, limit: int = 5) -> str:
         results = self.conversations.query(
@@ -88,28 +111,33 @@ class MemoryManager:
             self.add_personal_info("location", location)
         # Add more rules as needed 
 
-    def list_facts(self, category: str = None) -> list:
+    def list_facts(self, category: str = None) -> List[str]:
+        """List all facts, optionally filtered by category."""
         try:
-            if category:
-                results = self.long_term_memory.query(
-                    query_texts=[""],
-                    where={"category": category}
-                )
-            else:
-                results = self.long_term_memory.query(
-                    query_texts=[""],
-                    n_results=100  # Adjust limit as needed
-                )
+            print(f"Attempting to list facts with category: {category}")  # Debug print
+            results = self.long_term_memory.query(
+                query_texts=[""],
+                where={"category": category} if category else None,
+                n_results=100  # Increase number of results
+            )
             
-            if results and results['documents']:
-                # Format facts with their IDs for reference
-                facts = []
-                for i, (doc, metadata) in enumerate(zip(results['documents'][0], results['metadatas'][0])):
-                    fact_id = results['ids'][0][i]
-                    category = metadata.get('category', 'general')
-                    facts.append(f"[{fact_id}] ({category}) {doc}")
-                return facts
-            return []
+            print(f"Query results: {results}")  # Debug print
+            
+            if not results or not results['ids'] or not results['ids'][0]:
+                print("No results found")  # Debug print
+                return []
+            
+            facts = []
+            for i, (fact_id, doc, meta) in enumerate(zip(
+                results['ids'][0],
+                results['documents'][0],
+                results['metadatas'][0]
+            )):
+                fact_str = f"[{fact_id}] ({meta.get('category', 'general')}) {doc}"
+                facts.append(fact_str)
+                print(f"Found fact: {fact_str}")  # Debug print
+            
+            return facts
         except Exception as e:
             print(f"Error listing facts: {e}")
             return []

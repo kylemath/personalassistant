@@ -5,6 +5,7 @@ gmail_token.pickle
 calendar_token.pickle
 *.pickle
 credentials.json
+.chat_history
 
 # Environment variables
 .env
