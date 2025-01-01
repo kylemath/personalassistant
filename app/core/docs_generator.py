@@ -13,7 +13,7 @@ class DocsGenerator:
     
     def generate_html(self):
         """Generate HTML for command reference."""
-        html = ['<div id="command-reference"><h2>Available Commands</h2>']
+        html = []  # Remove the outer div and header
         
         for section, data in self.commands.items():
             html.append(f'''
@@ -27,7 +27,6 @@ class DocsGenerator:
                 </div>
             ''')
         
-        html.append('</div>')
         return '\n'.join(html)
     
     def generate_markdown(self):
