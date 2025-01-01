@@ -263,10 +263,13 @@ If you learn any new personal information, remember it for future reference.
             # Store the interaction
             self.memory.add_interaction(prompt, response_text)
             
+            # Store the conversation
+            self.memory.add_conversation(prompt, response_text)
+            
             return response_text
         except Exception as e:
             print(f"Error generating response: {e}")
-            return f"Error: {str(e)}"
+            return str(e)
 
     async def _handle_command(self, prompt: str) -> str:
         parts = prompt.split()

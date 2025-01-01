@@ -10,60 +10,91 @@ class EmailHandler:
         self.draft_state = None   # Track state of draft process
         self.last_email_list = []  # Store the last list of emails for number references
 
-    def handle_command(self, command: str, args: str) -> str:
-        """Handle email-related commands"""
-        # Handle draft review responses
-        if self.draft_state == "awaiting_review":
-            if command.lower() == "send":
-                return self._send_current_draft()
-            elif command.lower() == "revise":
-                self.draft_state = "revising"
-                return f"What changes would you like to make to the draft?\n\nPlease respond with: /email revise \"your requested changes\""
-            elif command.lower() == "discard":
-                self.draft_state = None
-                self.current_draft = None
-                return "Draft discarded. You can start over with: /email draft reply"
+    def handle_command(self, subcommand: str, args: str = "") -> str:
+        """Handle email-related commands."""
+        try:
+            print(f"Debug: Email command received: {subcommand} with args: {args}")  # Debug print
+            if subcommand == "list":
+                unread = self.gmail.list_unread_emails()
+                print(f"Debug: Got unread emails: {unread}")  # Debug print
+                if not unread:
+                    return "No unread emails found."
+                
+                # Store the list for number references
+                self.last_email_list = unread
+                
+                response = f"Here are your unread emails ({len(unread)} total):\n\n"
+                for i, email in enumerate(unread, 1):
+                    response += f"{i}. ID: {email['id']}\n"
+                    response += f"   From: {email['from']}\n"
+                    response += f"   Subject: {email['subject']}\n"
+                    response += f"   Date: {email['date']}\n"
+                    if email.get('labels'):
+                        response += f"   Folder: {', '.join(email['labels'])}\n"
+                    response += f"   Snippet: {email['snippet']}\n\n"
+                
+                response += "\nTo read an email, use either:"
+                response += "\n- /email read <number> (1-5)"
+                response += "\n- /email read <email_id>"
+                return response
+            # Handle draft review responses
+            if self.draft_state == "awaiting_review":
+                if subcommand.lower() == "send":
+                    return self._send_current_draft()
+                elif subcommand.lower() == "revise":
+                    self.draft_state = "revising"
+                    return f"What changes would you like to make to the draft?\n\nPlease respond with: /email revise \"your requested changes\""
+                elif subcommand.lower() == "discard":
+                    self.draft_state = None
+                    self.current_draft = None
+                    return "Draft discarded. You can start over with: /email draft reply"
 
-        if command == "revise" and self.draft_state == "revising":
-            self.draft_state = "drafting"
-            prompt = self._create_revision_prompt(args)
-            return prompt
+            if subcommand == "revise" and self.draft_state == "revising":
+                self.draft_state = "drafting"
+                prompt = self._create_revision_prompt(args)
+                return prompt
 
-        # Handle answers to AI questions
-        if command == "answer" and self.awaiting_answer:
-            question = self.awaiting_answer
-            self.email_knowledge[question] = args
-            self.awaiting_answer = None
-            return self._continue_draft_reply()
+            # Handle answers to AI questions
+            if subcommand == "answer" and self.awaiting_answer:
+                question = self.awaiting_answer
+                self.email_knowledge[question] = args
+                self.awaiting_answer = None
+                return self._continue_draft_reply()
 
-        if command == "draft" and args == "reply":
-            self.draft_state = "drafting"
-            if not self.current_email_context:
-                return "Please read an email first using /email read <email_id>"
-            
-            email = self.current_email_context
-            
-            # Check if we need any information
-            missing_info = self._check_missing_information(email)
-            if missing_info:
-                self.awaiting_answer = missing_info
-                return f"To help draft a better reply, could you tell me: {missing_info}\n\nPlease respond with: /email answer \"your response\""
+            if subcommand == "draft" and args == "reply":
+                self.draft_state = "drafting"
+                if not self.current_email_context:
+                    return "Please read an email first using /email read <email_id>"
+                
+                email = self.current_email_context
+                
+                # Check if we need any information
+                missing_info = self._check_missing_information(email)
+                if missing_info:
+                    self.awaiting_answer = missing_info
+                    return f"To help draft a better reply, could you tell me: {missing_info}\n\nPlease respond with: /email answer \"your response\""
 
-            return self._continue_draft_reply()
+                return self._continue_draft_reply()
 
-        # Existing command handling
-        if command == "list":
-            return self._handle_list(args)
-        elif command == "read":
-            return self._handle_read(args)
-        elif command == "markread":
-            return self._handle_markread(args)
-        elif command == "reply":
-            return self._handle_reply(args)
-        elif command == "starred":
-            return self._handle_starred(args)
-        else:
-            return "Unknown email command. Available commands: list, read, markread, reply, draft reply, starred"
+            # Existing command handling
+            if subcommand == "read":
+                return self._handle_read(args)
+            elif subcommand == "markread":
+                return self._handle_markread(args)
+            elif subcommand == "reply":
+                return self._handle_reply(args)
+            elif subcommand == "starred":
+                return self._handle_starred(args)
+            elif subcommand == "unsubscribe":
+                if not self.current_email_context:
+                    return "Please read an email first using /email read <email_id>"
+                    
+                result = self.gmail.unsubscribe_from_sender(self.current_email_context['id'])
+                return f"Unsubscribe attempt: {result}"
+            else:
+                return "Unknown email command. Available commands: list, read, markread, reply, draft reply, starred"
+        except Exception as e:
+            return f"Error handling email command: {str(e)}"
 
     def _handle_list(self, args: str) -> str:
         """Handle the list command"""
@@ -96,41 +127,41 @@ class EmailHandler:
         except Exception as e:
             return f"Error listing emails: {str(e)}"
 
-    def _handle_read(self, identifier: str) -> str:
+    def _handle_read(self, args: str) -> str:
         """Handle the read command"""
         try:
-            if not identifier:
-                return "Please provide an email ID or number. Use /email list to see available emails."
+            email_id = self._resolve_email_id(args)
+            if not email_id:
+                return "Please provide a valid email ID or number"
             
-            # Check if identifier is a number
-            email_id = identifier.strip()
-            if email_id.isdigit():
-                number = int(email_id)
-                if not self.last_email_list or number < 1 or number > len(self.last_email_list):
-                    return "Invalid email number. Please use /email list to see available emails."
-                email_id = self.last_email_list[number - 1]['id']
-            
-            email = self.gmail.get_email_by_id(email_id)
+            email = self.gmail.get_email(email_id)
             if not email:
-                return f"Could not find email with ID {email_id}"
-
-            # Store email context when reading
+                return "Email not found"
+            
+            # Store context for reply
             self.current_email_context = email
-
+            
             # Mark as read when viewing
             self.gmail.mark_as_read(email_id)
-
+            
+            # Get unsubscribe link if available
+            unsubscribe_link = self.gmail.get_unsubscribe_link(email_id)
+            
             response = f"From: {email['from']}\n"
             response += f"Subject: {email['subject']}\n"
             response += f"Date: {email['date']}\n"
             if email.get('labels'):
                 response += f"Folder: {', '.join(email['labels'])}\n"
             response += f"\n{email['body']}\n\n"
-            response += f"\nTo reply, use either:"
-            response += f"\n- /email reply {email_id} \"Your message\""
-            response += f"\n- /email draft reply"
+            
+            response += "Available actions:\n"
+            response += "- /email reply <your message>\n"
+            response += "- /email draft reply (for AI-assisted reply)\n"
+            if unsubscribe_link:
+                response += "- /email unsubscribe (to unsubscribe from this sender)\n"
             
             return response
+            
         except Exception as e:
             return f"Error reading email: {str(e)}"
 
@@ -292,3 +323,28 @@ Or ask any questions about the draft.
             return response
         except Exception as e:
             return f"Error listing starred emails: {str(e)}" 
+
+    def _resolve_email_id(self, identifier: str) -> str:
+        """Convert email number or ID to actual email ID."""
+        try:
+            if not identifier:
+                return None
+            
+            # Clean the identifier
+            identifier = identifier.strip()
+            
+            # Check if it's a number reference
+            if identifier.isdigit():
+                number = int(identifier)
+                if self.last_email_list and 1 <= number <= len(self.last_email_list):
+                    return self.last_email_list[number - 1]['id']
+                else:
+                    print(f"Invalid email number: {number}")
+                    return None
+                
+            # Otherwise treat as direct email ID
+            return identifier
+            
+        except Exception as e:
+            print(f"Error resolving email ID: {e}")
+            return None 
