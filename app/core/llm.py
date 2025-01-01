@@ -78,6 +78,37 @@ class LLMManager:
                 return json.load(f)["team_calendars"]
         return {}  # fallback to empty dict if no config
 
+    async def _update_calendar_config(self, calendar_name: str) -> bool:
+        """Add a new calendar to the configuration."""
+        config_path = Path("app/config/calendar_config.json")
+        try:
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = json.load(f)
+            else:
+                config = {"team_calendars": {}}
+
+            # Find next available team number
+            existing_nums = [int(k.replace('team', '')) 
+                           for k in config["team_calendars"].keys() 
+                           if k.startswith('team')]
+            next_num = max(existing_nums, default=0) + 1
+            
+            # Add new calendar
+            config["team_calendars"][f"team{next_num}"] = calendar_name
+            
+            # Write updated config
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+            
+            # Reload calendars
+            self.team_calendars = self._load_calendar_config()
+            return True
+            
+        except Exception as e:
+            print(f"Error updating calendar config: {e}")
+            return False
+
     async def generate_response(self, prompt: str, context: dict = None) -> str:
         try:
             # Update current time on each request
@@ -476,6 +507,25 @@ If you learn any new personal information, remember it for future reference.
                 return self.email_handler.set_current_draft(draft_response)
             
             return response
+
+        # Add calendar config command
+        if command == "/calendar" and len(parts) > 1:
+            subcommand = parts[1].lower()
+            
+            if subcommand == "teams":
+                if len(parts) < 3:
+                    # List current calendars
+                    if not self.team_calendars:
+                        return "No team calendars configured"
+                    return "Team calendars being tracked:\n" + "\n".join(
+                        f"- {name}" for name in self.team_calendars.values()
+                    )
+                
+                # Add new team
+                team_name = " ".join(parts[2:])
+                if await self._update_calendar_config(team_name):
+                    return f"Added team calendar: {team_name}"
+                return f"Failed to add team calendar: {team_name}"
 
         return f"Unknown command: {command}" 
 

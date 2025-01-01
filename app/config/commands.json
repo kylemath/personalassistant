@@ -4,6 +4,10 @@
         "title": "Calendar Commands",
         "commands": [
             {
+                "syntax": "/calendar teams [team_name]",
+                "description": "List or add team calendars to track"
+            },
+            {
                 "syntax": "/calendar list [number]",
                 "description": "List upcoming events. Use natural queries like 'today', 'tomorrow', 'next week', or specific calendars"
             },
@@ -21,6 +25,8 @@
             }
         ],
         "examples": [
+            "/calendar teams",
+            "/calendar teams \"Soccer Team\"",
             "/calendar list 10",
             "/calendar list today",
             "/calendar list work",
