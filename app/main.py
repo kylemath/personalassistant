@@ -37,14 +37,14 @@ async def root():
 
 @app.post("/chat")
 async def chat(message: str):
-    response = await llm_manager.generate_response(message)
+    response = await llm.generate_response(message)
     return {"response": response}
 
 @app.post("/api/chat")
 async def chat_endpoint(chat_message: ChatMessage):
     """Direct chat endpoint for IDE integration"""
     try:
-        response = await llm_manager.generate_response(
+        response = await llm.generate_response(
             chat_message.message,
             context=chat_message.context
         )
