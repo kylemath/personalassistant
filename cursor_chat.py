@@ -1,13 +1,47 @@
 import requests
 import argparse
 import json
+import os
 from rich.console import Console
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+from rich.panel import Panel
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 
 console = Console()
+
+def load_commands():
+    """Load commands from commands.json."""
+    try:
+        commands_path = os.path.join('app', 'config', 'commands.json')
+        with open(commands_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        console.print(f"[bold red]Error loading commands:[/] {str(e)}")
+        return None
+
+def display_help():
+    """Display formatted help information from commands.json."""
+    commands = load_commands()
+    if not commands:
+        return
+    
+    for section, data in commands.items():
+        # Create section header
+        console.print(f"\n[bold]{data['emoji']} {data['title']}[/]")
+        
+        # Print commands and descriptions
+        for cmd in data['commands']:
+            console.print(f"[cyan]{cmd['syntax']}[/]")
+            console.print(f"  [dim]# {cmd['description']}[/]")
+        
+        # Print examples
+        console.print("\n[bold]Examples:[/]")
+        for example in data['examples']:
+            console.print(f"  [green]{example}[/]")
+        
+        console.print()  # Add blank line between sections
 
 def format_response(response: str) -> None:
     """Format and print the response with syntax highlighting."""
@@ -80,6 +114,9 @@ def main():
                 
                 if message.lower() in ['exit', 'quit']:
                     break
+                elif message.lower() == '/help':
+                    display_help()
+                    continue
                 
                 response = chat_with_assistant(message, args.context)
                 console.print("\n[bold cyan]Assistant:[/]")

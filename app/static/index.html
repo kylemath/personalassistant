@@ -37,8 +37,6 @@
             background-color: #f5f5f5;
             margin-right: 20%;
         }
-
-        /* Modal styles */
         .modal {
             display: none;
             position: fixed;
@@ -49,7 +47,6 @@
             background-color: rgba(0,0,0,0.5);
             z-index: 1000;
         }
-
         .modal-content {
             background-color: white;
             margin: 5% auto;
@@ -61,7 +58,6 @@
             border-radius: 5px;
             position: relative;
         }
-
         .close-button {
             position: absolute;
             right: 10px;
@@ -69,56 +65,40 @@
             font-size: 24px;
             cursor: pointer;
         }
-
-        /* Command reference styles */
-        #command-reference {
-            margin-top: 30px;
-            padding: 20px;
-            border-top: 2px solid #eee;
-            font-size: 0.9em;
-        }
-
-        .command-section {
-            margin-bottom: 20px;
-        }
-
-        .command-section h2 {
-            color: #2962ff;
-            border-bottom: 1px solid #2962ff;
-            padding-bottom: 5px;
-            margin-bottom: 10px;
-            font-size: 1.2em;
-        }
-
-        .command {
-            font-family: monospace;
-            background-color: #f5f5f5;
-            padding: 5px;
-            border-radius: 3px;
-            margin: 5px 0;
-        }
-
-        .examples {
-            margin-left: 20px;
-            color: #666;
-            font-size: 0.9em;
-        }
-
-        /* Add help button */
         #help-button {
             position: fixed;
             bottom: 20px;
             right: 20px;
             padding: 10px 20px;
-            background-color: #2962ff;
+            background-color: #2196f3;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
         }
-
         #help-button:hover {
             background-color: #1565c0;
+        }
+        .command-section {
+            margin-bottom: 20px;
+        }
+        .command {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 5px;
+            margin: 5px 0;
+            border-radius: 3px;
+        }
+        .examples {
+            margin-top: 10px;
+            padding-left: 20px;
+            font-size: 0.9em;
+        }
+        .command .description {
+            color: #666;
+            margin-left: 10px;
+            font-size: 0.9em;
+            font-style: italic;
         }
     </style>
 </head>
@@ -131,58 +111,11 @@
     </div>
     <button id="help-button" onclick="showHelp()">Help (?)</button>
 
-    <!-- Command Reference Section -->
-    <div id="command-reference">
-        <h2>Available Commands</h2>
-        
-        <div class="command-section">
-            <h2>🗓️ Calendar</h2>
-            <div class="command">/calendar list</div>
-            <div class="command">/calendar add "Title" "Time" ["End Time"] ["Description"] ["Location"] [--recurring daily/weekly/monthly/yearly]</div>
-            <div class="examples">
-                Examples:<br>
-                <code>/calendar add "Team Meeting" "tomorrow at 2pm"</code><br>
-                <code>/calendar add "Weekly Standup" "monday 9am" --recurring weekly</code>
-            </div>
-        </div>
-
-        <div class="command-section">
-            <h2>✅ Todo List</h2>
-            <div class="command">/todo add "Task" [--priority high/medium/low] [--category name] [--due "date"] ["notes"]</div>
-            <div class="command">/todo list [category] [--priority high/medium/low]</div>
-            <div class="command">/todo done &lt;todo_id&gt;</div>
-            <div class="command">/todo delete &lt;todo_id&gt;</div>
-            <div class="examples">
-                <code>/todo add "Buy groceries" --category personal</code><br>
-                <code>/todo add "Write docs" --priority high --due "friday 5pm"</code>
-            </div>
-        </div>
-
-        <div class="command-section">
-            <h2>🧠 Memory</h2>
-            <div class="command">/addfact [category:] &lt;fact&gt;</div>
-            <div class="command">/listfacts [category]</div>
-            <div class="command">/deletefact &lt;fact_id&gt;</div>
-        </div>
-
-        <div class="command-section">
-            <h2>💡 Tips</h2>
-            <ul>
-                <li>Use quotes for text with spaces</li>
-                <li>Times can be natural language like "tomorrow at 2pm"</li>
-                <li>Categories help organize your todos and facts</li>
-            </ul>
-        </div>
-
-        <div class="command-section">
-            <h2>📧 Email</h2>
-            <div class="command">/email list [search query]</div>
-            <div class="command">/email send "recipient@email.com" "Subject" "Body"</div>
-            <div class="command">/email reply &lt;email_id&gt; "Reply message"</div>
-            <div class="examples">
-                <code>/email list unread</code><br>
-                <code>/email send "john@example.com" "Meeting Notes" "Here are the notes..."</code>
-            </div>
+    <!-- Help modal -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="hideHelp()">&times;</span>
+            <div id="help-content">Loading...</div>
         </div>
     </div>
 
@@ -226,9 +159,19 @@
             }
         });
 
-        // Help modal functions
-        function showHelp() {
-            document.getElementById('help-modal').style.display = 'block';
+        async function showHelp() {
+            const helpModal = document.getElementById('help-modal');
+            const helpContent = document.getElementById('help-content');
+            helpModal.style.display = 'block';
+            
+            try {
+                const response = await fetch('/help');
+                const html = await response.text();
+                helpContent.innerHTML = html;
+            } catch (error) {
+                helpContent.innerHTML = 'Error loading help content';
+                console.error('Error:', error);
+            }
         }
 
         function hideHelp() {
@@ -254,4 +197,45 @@
         });
     </script>
 </body>
-</html> 
+</html><!-- Command Reference Section --><div id="command-reference"><h2>Available Commands</h2>
+
+                <div class="command-section">
+                    <h2>🗓️ Calendar Commands</h2>
+                    <div class="command">/calendar list [number] <span class="description"># List upcoming events. Use natural queries like 'today', 'tomorrow', 'next week', or specific calendars</span></div><div class="command">/calendar add "Title" "Time" ["End Time"] ["Description"] ["Location"] [--recurring daily/weekly/monthly/yearly] <span class="description"># Add a new calendar event. Supports natural language time expressions</span></div><div class="command">You can also use natural language <span class="description"># Example: 'Do I have any meetings today?' or 'Schedule lunch with John tomorrow at noon'</span></div><div class="command">/calendar delete <event_id> <span class="description"># Delete a specific event</span></div>
+                    <div class="examples">
+                        Examples:<br>
+                        <code>/calendar list 10</code><br><code>/calendar list today</code><br><code>/calendar list work</code><br><code>What's on my calendar for tomorrow?</code><br><code>Do I have any meetings in my work calendar today?</code><br><code>/calendar add "Team Meeting" "tomorrow at 2pm"</code><br><code>/calendar add "Weekly Standup" "monday 9am" --recurring weekly</code><br><code>/calendar add "Lunch with John" "next thursday at noon for 1 hour at Cafe Luigi"</code><br><code>Schedule a meeting with the team next Tuesday from 2-3pm</code><br><code>Add a doctor's appointment for next Friday at 10am</code>
+                    </div>
+                </div>
+            
+
+                <div class="command-section">
+                    <h2>📧 Email Commands</h2>
+                    <div class="command">/email list [number] <span class="description"># List unread emails (default 5)</span></div><div class="command">/email read <number|email_id> <span class="description"># Read specific email</span></div><div class="command">/email reply <message> <span class="description"># Reply to last read email</span></div><div class="command">/email draft reply <span class="description"># AI-assisted draft reply</span></div><div class="command">/email starred [number|all] <span class="description"># List starred emails</span></div><div class="command">/email unsubscribe <span class="description"># Unsubscribe from current email sender</span></div><div class="command">/email markread <number|email_id> <span class="description"># Mark an email as read without opening it</span></div>
+                    <div class="examples">
+                        Examples:<br>
+                        <code>/email list 10</code><br><code>/email read 1</code><br><code>/email starred all</code>
+                    </div>
+                </div>
+            
+
+                <div class="command-section">
+                    <h2>✅ Todo List Commands</h2>
+                    <div class="command">/todo add "Task" [--priority high/medium/low] [--category name] [--due "date"] ["notes"] <span class="description"># Add a new todo item</span></div><div class="command">/todo list [category] [--priority high/medium/low] <span class="description"># List todo items</span></div><div class="command">/todo done <todo_id> <span class="description"># Mark todo as complete</span></div><div class="command">/todo delete <todo_id> <span class="description"># Delete a todo item</span></div>
+                    <div class="examples">
+                        Examples:<br>
+                        <code>/todo add "Write documentation" --priority high --category work --due "friday 5pm"</code><br><code>/todo list work --priority high</code>
+                    </div>
+                </div>
+            
+
+                <div class="command-section">
+                    <h2>🧠 Memory Commands</h2>
+                    <div class="command">/addfact [category:] <fact> <span class="description"># Add a fact to memory</span></div><div class="command">/listfacts [category] <span class="description"># List stored facts</span></div><div class="command">/deletefact <fact_id> <span class="description"># Delete a stored fact</span></div>
+                    <div class="examples">
+                        Examples:<br>
+                        <code>/addfact work: Meeting every Monday at 10am</code><br><code>/listfacts work</code>
+                    </div>
+                </div>
+            
+</div>

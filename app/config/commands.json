@@ -1,0 +1,123 @@
+{
+    "calendar": {
+        "emoji": "🗓️",
+        "title": "Calendar Commands",
+        "commands": [
+            {
+                "syntax": "/calendar list [number]",
+                "description": "List upcoming events. Use natural queries like 'today', 'tomorrow', 'next week', or specific calendars"
+            },
+            {
+                "syntax": "/calendar add \"Title\" \"Time\" [\"End Time\"] [\"Description\"] [\"Location\"] [--recurring daily/weekly/monthly/yearly]",
+                "description": "Add a new calendar event. Supports natural language time expressions"
+            },
+            {
+                "syntax": "You can also use natural language",
+                "description": "Example: 'Do I have any meetings today?' or 'Schedule lunch with John tomorrow at noon'"
+            },
+            {
+                "syntax": "/calendar delete <event_id>",
+                "description": "Delete a specific event"
+            }
+        ],
+        "examples": [
+            "/calendar list 10",
+            "/calendar list today",
+            "/calendar list work",
+            "What's on my calendar for tomorrow?",
+            "Do I have any meetings in my work calendar today?",
+            "/calendar add \"Team Meeting\" \"tomorrow at 2pm\"",
+            "/calendar add \"Weekly Standup\" \"monday 9am\" --recurring weekly",
+            "/calendar add \"Lunch with John\" \"next thursday at noon for 1 hour at Cafe Luigi\"",
+            "Schedule a meeting with the team next Tuesday from 2-3pm",
+            "Add a doctor's appointment for next Friday at 10am"
+        ]
+    },
+    "email": {
+        "emoji": "📧",
+        "title": "Email Commands",
+        "commands": [
+            {
+                "syntax": "/email list [number]",
+                "description": "List unread emails (default 5)"
+            },
+            {
+                "syntax": "/email read <number|email_id>",
+                "description": "Read specific email"
+            },
+            {
+                "syntax": "/email reply <message>",
+                "description": "Reply to last read email"
+            },
+            {
+                "syntax": "/email draft reply",
+                "description": "AI-assisted draft reply"
+            },
+            {
+                "syntax": "/email starred [number|all]",
+                "description": "List starred emails"
+            },
+            {
+                "syntax": "/email unsubscribe",
+                "description": "Unsubscribe from current email sender"
+            },
+            {
+                "syntax": "/email markread <number|email_id>",
+                "description": "Mark an email as read without opening it"
+            }
+        ],
+        "examples": [
+            "/email list 10",
+            "/email read 1",
+            "/email starred all"
+        ]
+    },
+    "todo": {
+        "emoji": "✅",
+        "title": "Todo List Commands",
+        "commands": [
+            {
+                "syntax": "/todo add \"Task\" [--priority high/medium/low] [--category name] [--due \"date\"] [\"notes\"]",
+                "description": "Add a new todo item"
+            },
+            {
+                "syntax": "/todo list [category] [--priority high/medium/low]",
+                "description": "List todo items"
+            },
+            {
+                "syntax": "/todo done <todo_id>",
+                "description": "Mark todo as complete"
+            },
+            {
+                "syntax": "/todo delete <todo_id>",
+                "description": "Delete a todo item"
+            }
+        ],
+        "examples": [
+            "/todo add \"Write documentation\" --priority high --category work --due \"friday 5pm\"",
+            "/todo list work --priority high"
+        ]
+    },
+    "memory": {
+        "emoji": "🧠",
+        "title": "Memory Commands",
+        "commands": [
+            {
+                "syntax": "/addfact [category:] <fact>",
+                "description": "Add a fact to memory"
+            },
+            {
+                "syntax": "/listfacts [category]",
+                "description": "List stored facts"
+            },
+            {
+                "syntax": "/deletefact <fact_id>",
+                "description": "Delete a stored fact"
+            }
+        ],
+        "examples": [
+            "/addfact work: Meeting every Monday at 10am",
+            "/listfacts work"
+        ]
+    }
+} 
