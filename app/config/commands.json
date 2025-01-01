@@ -119,5 +119,39 @@
             "/addfact work: Meeting every Monday at 10am",
             "/listfacts work"
         ]
+    },
+    "files": {
+        "emoji": "📁",
+        "title": "File Commands",
+        "commands": [
+            {
+                "syntax": "/file search <query>",
+                "description": "Search for files by name or content"
+            },
+            {
+                "syntax": "/file read <path>",
+                "description": "Read and display text file contents"
+            },
+            {
+                "syntax": "/file write <path> <content>",
+                "description": "Create or update a file"
+            },
+            {
+                "syntax": "/file list [path]",
+                "description": "List files in directory"
+            },
+            {
+                "syntax": "/file open <path>",
+                "description": "Open PDF or image files with system viewer"
+            }
+        ],
+        "examples": [
+            "/file search \"meeting notes\"",
+            "/file read \"documents/notes.txt\"",
+            "/file write \"todo.txt\" \"- Buy groceries\\n- Call mom\"",
+            "/file list \"documents\"",
+            "/file open \"documents/report.pdf\"",
+            "/file open \"pictures/vacation.jpg\""
+        ]
     }
 } 

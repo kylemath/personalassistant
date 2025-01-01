@@ -9,6 +9,7 @@ from .todo_manager import TodoManager
 from .gmail_manager import GmailManager
 from .email_handler import EmailHandler
 import pytz
+from pathlib import Path
 
 class LLMManager:
     def __init__(self):
@@ -23,6 +24,7 @@ class LLMManager:
         self.todos = TodoManager()
         self.gmail = GmailManager()
         self.email_handler = EmailHandler()
+        self.file_manager = None
         
         # Set timezone and current time context
         self.timezone = 'America/Edmonton'
@@ -40,6 +42,7 @@ class LLMManager:
             f"All times should be interpreted in {self.timezone} timezone",
             "system"
         )
+        self.team_calendars = self._load_calendar_config()
 
     def _cleanup_timezone_facts(self):
         """Remove duplicate timezone facts."""
@@ -66,6 +69,14 @@ class LLMManager:
             self.memory.add_long_term_fact(timezone_fact, "system")
         if not has_interpretation:
             self.memory.add_long_term_fact(interpretation_fact, "system")
+
+    def _load_calendar_config(self):
+        """Load team calendar configuration."""
+        config_path = Path("app/config/calendar_config.json")
+        if config_path.exists():
+            with open(config_path) as f:
+                return json.load(f)["team_calendars"]
+        return {}  # fallback to empty dict if no config
 
     async def generate_response(self, prompt: str, context: dict = None) -> str:
         try:
@@ -100,14 +111,11 @@ class LLMManager:
                     if "game" in prompt.lower():
                         search_terms.append("game")
                     
-                    # Add all soccer team calendars
-                    if any(team in prompt.lower() for team in ["juventus", "pirates", "beer hunters", "pirates sc"]):
-                        if "juventus" in prompt.lower():
-                            search_terms.append("juventus")
-                        if "pirates" in prompt.lower() or "pirates sc" in prompt.lower():
-                            search_terms.append("pirates sc")
-                        if "beer" in prompt.lower() or "beer hunters" in prompt.lower():
-                            search_terms.append("beer hunters")
+                    # Replace the hardcoded team checks with:
+                    prompt_lower = prompt.lower()
+                    for team_name in self.team_calendars.values():
+                        if team_name.lower() in prompt_lower:
+                            search_terms.append(team_name)
                     
                     # Find the next matching event
                     for event in events:
@@ -274,6 +282,16 @@ If you learn any new personal information, remember it for future reference.
     async def _handle_command(self, prompt: str) -> str:
         parts = prompt.split()
         command = parts[0].lower()
+
+        # Add file command handling
+        if command == "/file":
+            if len(parts) < 2:
+                return "Please specify a file command (search/read/write/list)"
+            
+            subcommand = parts[1].lower()
+            args = parts[2:]  # Rest of the arguments
+            
+            return await self.handle_file_command(subcommand, args)
 
         if command == "/addfact":
             # Format: /addfact category: fact
@@ -485,4 +503,63 @@ If you learn any new personal information, remember it for future reference.
                 filtered.append(event)
         
         return filtered 
+
+    def register_file_manager(self, file_manager):
+        self.file_manager = file_manager
+
+    async def handle_file_command(self, command: str, args: list) -> str:
+        """Handle file-related commands."""
+        if not self.file_manager:
+            return "File operations not available"
+
+        try:
+            # Parse --show-hidden flag
+            show_hidden = False
+            filtered_args = []
+            for arg in args:
+                if arg == "--show-hidden":
+                    show_hidden = True
+                else:
+                    filtered_args.append(arg)
+            args = filtered_args
+
+            if command == "search":
+                query = " ".join(args)
+                results = await self.file_manager.search_files(query, show_hidden=show_hidden)
+                return self._format_file_results(results)
+
+            elif command == "list":
+                path = args[0] if args else "~"
+                results = await self.file_manager.list_directory(path, show_hidden=show_hidden)
+                return self._format_file_results(results)
+
+            elif command == "read":
+                path = " ".join(args)
+                content = await self.file_manager.read_file(path)
+                return content if content else "Could not read file"
+
+            elif command == "write":
+                path = args[0]
+                content = " ".join(args[1:])
+                success = await self.file_manager.write_file(path, content)
+                return "File written successfully" if success else "Failed to write file"
+
+            elif command == "open":
+                path = " ".join(args)
+                success = await self.file_manager.open_file(path)
+                return "Opening file..." if success else "Failed to open file"
+
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    def _format_file_results(self, results: list) -> str:
+        """Format file listing/search results."""
+        if not results:
+            return "No files found"
+        
+        output = []
+        for item in results:
+            icon = "📁" if item["type"] == "folder" else "📄"
+            output.append(f"{icon} {item['path']}")
+        return "\n".join(output)
  

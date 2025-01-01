@@ -69,3 +69,4 @@ data/memory/
 token*.pickle
 *.secret
 secrets/ 
+app/config/calendar_config.json

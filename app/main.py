@@ -4,11 +4,16 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from app.core.llm import LLMManager
 from app.core.docs_generator import DocsGenerator
+from app.core.file_manager import FileManager
 
 app = FastAPI()
 
 # Initialize managers
 llm = LLMManager()
+file_manager = FileManager()
+
+# Pass file_manager to LLM manager
+llm.register_file_manager(file_manager)
 
 # Update documentation on startup
 @app.on_event("startup")
