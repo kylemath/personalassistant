@@ -1,8 +1,9 @@
 import commands from '../config/commands.json';
 
 export interface Command {
-  syntax: string;
+  command: string;
   description: string;
+  example?: string;
 }
 
 export interface CommandSection {
@@ -16,20 +17,9 @@ export interface Commands {
   [key: string]: CommandSection;
 }
 
-export const getCommandSuggestions = (input: string): Command[] => {
-  const suggestions: Command[] = [];
-  const inputLower = input.toLowerCase();
-
-  Object.values(commands).forEach((section: CommandSection) => {
-    section.commands.forEach((command: Command) => {
-      const baseCommand = command.syntax.split(' ')[0].toLowerCase();
-      if (baseCommand.startsWith(inputLower) || inputLower.startsWith(baseCommand)) {
-        suggestions.push(command);
-      }
-    });
-  });
-
-  return suggestions;
-};
+export function getCommandSuggestions(input: string): Command[] {
+  // Implementation will be added later
+  return [];
+}
 
 export const getAllCommands = (): Commands => commands; 

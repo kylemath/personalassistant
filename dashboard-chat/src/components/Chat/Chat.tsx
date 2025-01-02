@@ -1,72 +1,121 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, KeyboardEvent, ChangeEvent } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { addMessage, setTyping, Message, ChatState } from '../../store/slices/chatSlice';
-import { v4 as uuidv4 } from 'uuid';
+import { RootState } from '../../store';
+import { getCommandSuggestions, Command } from '../../utils/commands';
+import { wsService } from '../../services/websocket';
+import { ApiService } from '../../services/api';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { RootState } from '../../store';
-import { getCommandSuggestions, Command } from '../../utils/commands';
+import { v4 as uuidv4 } from 'uuid';
 
-interface CodeBlockProps {
-  language: string;
-  value: string;
+interface Message {
+  id: string;
+  text: string;
+  sender: 'user' | 'assistant';
 }
 
-const CodeBlock: React.FC<CodeBlockProps> = ({ language, value }) => {
-  return (
-    <SyntaxHighlighter style={tomorrow} language={language} PreTag="div">
-      {value}
-    </SyntaxHighlighter>
-  );
-};
-
 export const Chat: React.FC = () => {
-  const dispatch = useAppDispatch();
-  const chatState = useAppSelector<ChatState>((state: RootState) => state.chat);
-  const messages = chatState.messages;
-  const isTyping = chatState.isTyping;
-  const [inputMessage, setInputMessage] = useState('');
+  const [message, setMessage] = useState('');
   const [suggestions, setSuggestions] = useState<Command[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dispatch = useAppDispatch();
+  const { messages, isTyping } = useAppSelector((state: RootState) => state.chat);
+  const apiService = new ApiService();
 
   useEffect(() => {
-    scrollToBottom();
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
-  useEffect(() => {
-    if (showSuggestions && selectedSuggestion !== -1 && suggestionsRef.current) {
-      const suggestionElements = suggestionsRef.current.children;
-      const selectedElement = suggestionElements[selectedSuggestion] as HTMLElement;
-      
-      if (selectedElement) {
-        const containerTop = suggestionsRef.current.scrollTop;
-        const containerBottom = containerTop + suggestionsRef.current.clientHeight;
-        const elementTop = selectedElement.offsetTop;
-        const elementBottom = elementTop + selectedElement.offsetHeight;
+  const handleSendMessage = async () => {
+    if (!message.trim()) return;
 
-        if (elementTop < containerTop) {
-          suggestionsRef.current.scrollTop = elementTop;
-        } else if (elementBottom > containerBottom) {
-          suggestionsRef.current.scrollTop = elementBottom - suggestionsRef.current.clientHeight;
-        }
+    const newMessage: Message = {
+      id: uuidv4(),
+      text: message,
+      sender: 'user'
+    };
+
+    // Add message to Redux store
+    // dispatch(addMessage(newMessage));
+
+    if (message.startsWith('/')) {
+      wsService.sendMessage({ command: message });
+    } else {
+      try {
+        const response = await apiService.sendMessage(message);
+        // Handle response
+      } catch (error) {
+        console.error('Error sending message:', error);
       }
     }
-  }, [selectedSuggestion, showSuggestions]);
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (suggestions.length > 0) {
+    setMessage('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedSuggestion(-1);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    } else if (e.key === 'Tab' && !showSuggestions) {
+      e.preventDefault();
+      const newSuggestions = getCommandSuggestions(message);
+      if (newSuggestions.length > 0) {
+        setSuggestions(newSuggestions);
+        setShowSuggestions(true);
+        setSelectedSuggestion(0);
+      }
+    } else if (showSuggestions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSuggestion(prev => 
+          prev < suggestions.length - 1 ? prev + 1 : 0
+        );
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSuggestion(prev => 
+          prev > 0 ? prev - 1 : suggestions.length - 1
+        );
+      } else if (e.key === 'Enter' && selectedSuggestion !== -1) {
+        e.preventDefault();
+        setMessage(suggestions[selectedSuggestion].command);
+        setShowSuggestions(false);
+        setSelectedSuggestion(-1);
+      } else if (e.key === 'Escape') {
+        setShowSuggestions(false);
+        setSelectedSuggestion(-1);
+      }
+    }
+  };
+
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setMessage(newValue);
+    
+    if (newValue.startsWith('/')) {
+      const newSuggestions = getCommandSuggestions(newValue);
+      setSuggestions(newSuggestions);
+      setShowSuggestions(true);
+      setSelectedSuggestion(newSuggestions.length > 0 ? 0 : -1);
+    } else {
+      setShowSuggestions(false);
+      setSelectedSuggestion(-1);
+    }
+  };
+
+  const handleWheel = (e: WheelEvent) => {
+    if (showSuggestions) {
       e.preventDefault();
       const delta = Math.sign(e.deltaY);
-      setSelectedSuggestion((prev) => {
+      setSelectedSuggestion(prev => {
         const next = prev + delta;
         if (next < 0) return suggestions.length - 1;
         if (next >= suggestions.length) return 0;
@@ -75,171 +124,80 @@ export const Chat: React.FC = () => {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      if (!showSuggestions) {
-        const newSuggestions = getCommandSuggestions(inputMessage);
-        if (newSuggestions.length > 0) {
-          setSuggestions(newSuggestions);
-          setShowSuggestions(true);
-          setSelectedSuggestion(0);
-        }
-      } else {
-        setSelectedSuggestion((prev) => 
-          prev + 1 >= suggestions.length ? 0 : prev + 1
-        );
-      }
-    } else if (e.key === 'ArrowDown' && showSuggestions) {
-      e.preventDefault();
-      setSelectedSuggestion((prev) => 
-        prev + 1 >= suggestions.length ? 0 : prev + 1
+  const components = {
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || '');
+      return !inline && match ? (
+        <SyntaxHighlighter
+          style={tomorrow}
+          language={match[1]}
+          PreTag="div"
+          {...props}
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      ) : (
+        <code className={className} {...props}>
+          {children}
+        </code>
       );
-    } else if (e.key === 'ArrowUp' && showSuggestions) {
-      e.preventDefault();
-      setSelectedSuggestion((prev) => 
-        prev - 1 < 0 ? suggestions.length - 1 : prev - 1
-      );
-    } else if (e.key === 'Enter' && showSuggestions && selectedSuggestion !== -1) {
-      e.preventDefault();
-      const selected = suggestions[selectedSuggestion];
-      setInputMessage(selected.syntax);
-      setShowSuggestions(false);
-      setSelectedSuggestion(-1);
-    } else if (e.key === 'Escape' && showSuggestions) {
-      setShowSuggestions(false);
-      setSelectedSuggestion(-1);
-    } else if (showSuggestions && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
-      setShowSuggestions(false);
-      setSelectedSuggestion(-1);
-    }
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMessage.trim()) return;
-
-    const userMessage: Message = {
-      id: uuidv4(),
-      text: inputMessage,
-      sender: 'user',
-      timestamp: Date.now(),
-    };
-
-    dispatch(addMessage(userMessage));
-    dispatch(setTyping(true));
-    setInputMessage('');
-    setShowSuggestions(false);
-    setSelectedSuggestion(-1);
-
-    try {
-      const response = await fetch('http://localhost:8000/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: inputMessage,
-          context: {}
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const data = await response.json();
-      
-      const assistantMessage: Message = {
-        id: uuidv4(),
-        text: data.response,
-        sender: 'assistant',
-        timestamp: Date.now(),
-      };
-
-      dispatch(addMessage(assistantMessage));
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      dispatch(setTyping(false));
     }
   };
 
   return (
     <div className="chat-container">
       <div className="chat-messages">
-        {messages.map((message: Message) => (
-          <div
-            key={message.id}
-            className={`message ${message.sender === 'user' ? 'user' : 'assistant'}`}
-          >
-            <ReactMarkdown
-              components={{
-                code: ({ className, children }) => {
-                  const language = className ? className.replace('language-', '') : 'text';
-                  return (
-                    <CodeBlock
-                      language={language}
-                      value={String(children).replace(/\n$/, '')}
-                    />
-                  );
-                },
-              }}
-            >
-              {message.text}
-            </ReactMarkdown>
+        {messages.map((msg) => (
+          <div key={msg.id} className={`message ${msg.sender}`}>
+            <ReactMarkdown components={components}>{msg.text}</ReactMarkdown>
           </div>
         ))}
         {isTyping && (
-          <div className="message assistant typing">
-            <div className="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
+          <div className="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSendMessage} className="chat-input-container">
+      <div className="chat-input-container">
         <div className="input-wrapper">
           <input
-            ref={inputRef}
             type="text"
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
+            value={message}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Type your message... (Press Tab for commands)"
             className="chat-input"
+            placeholder="Type a message or command (start with /)"
           />
           {showSuggestions && suggestions.length > 0 && (
             <div 
+              className="suggestions" 
               ref={suggestionsRef}
-              className="suggestions"
-              onWheel={handleWheel}
+              onWheel={handleWheel as any}
             >
               {suggestions.map((suggestion, index) => (
                 <div
-                  key={suggestion.syntax}
+                  key={suggestion.command}
                   className={`suggestion ${index === selectedSuggestion ? 'selected' : ''}`}
                   onClick={() => {
-                    setInputMessage(suggestion.syntax);
+                    setMessage(suggestion.command);
                     setShowSuggestions(false);
                     setSelectedSuggestion(-1);
-                    inputRef.current?.focus();
                   }}
                 >
-                  <div className="suggestion-syntax">{suggestion.syntax}</div>
+                  <div className="suggestion-syntax">{suggestion.command}</div>
                   <div className="suggestion-description">{suggestion.description}</div>
                 </div>
               ))}
             </div>
           )}
         </div>
-        <button type="submit" className="send-button">
+        <button onClick={handleSendMessage} className="send-button">
           Send
         </button>
-      </form>
+      </div>
     </div>
   );
 }; 

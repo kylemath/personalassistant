@@ -1,89 +1,84 @@
-type MessageCallback = (message: string) => void;
-type ErrorCallback = (error: Event) => void;
+import { store } from '../store';
+import { addEvent, updateEvent, deleteEvent } from '../store/slices/calendarSlice';
 
-class WebSocketService {
-  private static instance: WebSocketService;
+export class WebSocketService {
   private ws: WebSocket | null = null;
-  private messageCallbacks: Set<MessageCallback> = new Set();
-  private errorCallbacks: Set<ErrorCallback> = new Set();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
-  private reconnectTimeout: number = 1000; // Start with 1 second
+  private reconnectTimeout = 1000;
 
-  private constructor() {
+  constructor() {
     this.connect();
-  }
-
-  public static getInstance(): WebSocketService {
-    if (!WebSocketService.instance) {
-      WebSocketService.instance = new WebSocketService();
-    }
-    return WebSocketService.instance;
   }
 
   private connect() {
     try {
-      this.ws = new WebSocket('ws://localhost:8000/ws/chat');
-      this.ws.onmessage = this.handleMessage.bind(this);
-      this.ws.onerror = this.handleError.bind(this);
-      this.ws.onclose = this.handleClose.bind(this);
-      this.ws.onopen = () => {
-        console.log('WebSocket connected');
-        this.reconnectAttempts = 0;
-        this.reconnectTimeout = 1000;
-      };
+      this.ws = new WebSocket('ws://localhost:8000/ws');
+      this.ws.onopen = this.handleOpen;
+      this.ws.onclose = this.handleClose;
+      this.ws.onmessage = this.handleMessage;
+      this.ws.onerror = this.handleError;
     } catch (error) {
       console.error('WebSocket connection error:', error);
-      this.handleError(new Event('error'));
+      this.handleReconnect();
     }
   }
 
-  private handleMessage(event: MessageEvent) {
-    const data = JSON.parse(event.data);
-    this.messageCallbacks.forEach(callback => callback(data.message));
-  }
+  private handleOpen = () => {
+    console.log('WebSocket connected');
+    this.reconnectAttempts = 0;
+  };
 
-  private handleError(error: Event) {
+  private handleClose = () => {
+    console.log('WebSocket disconnected');
+    this.handleReconnect();
+  };
+
+  private handleMessage = (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data);
+      
+      if (data.type === 'calendar') {
+        switch (data.action) {
+          case 'add':
+            store.dispatch(addEvent(data.event));
+            break;
+          case 'update':
+            store.dispatch(updateEvent(data.event));
+            break;
+          case 'delete':
+            store.dispatch(deleteEvent(data.eventId));
+            break;
+          default:
+            console.warn('Unknown calendar action:', data.action);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling WebSocket message:', error);
+    }
+  };
+
+  private handleError = (error: Event) => {
     console.error('WebSocket error:', error);
-    this.errorCallbacks.forEach(callback => callback(error));
-  }
+  };
 
-  private handleClose() {
-    console.log('WebSocket closed');
+  private handleReconnect = () => {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      setTimeout(() => {
-        console.log(`Attempting to reconnect (${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
-        this.reconnectAttempts++;
-        this.reconnectTimeout *= 2; // Exponential backoff
-        this.connect();
-      }, this.reconnectTimeout);
+      this.reconnectAttempts++;
+      console.log(`Reconnecting... Attempt ${this.reconnectAttempts}`);
+      setTimeout(() => this.connect(), this.reconnectTimeout * this.reconnectAttempts);
+    } else {
+      console.error('Max reconnection attempts reached');
     }
-  }
+  };
 
-  public sendMessage(message: string) {
+  public sendMessage(message: any) {
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ message }));
-      return true;
-    }
-    return false;
-  }
-
-  public onMessage(callback: MessageCallback) {
-    this.messageCallbacks.add(callback);
-    return () => this.messageCallbacks.delete(callback);
-  }
-
-  public onError(callback: ErrorCallback) {
-    this.errorCallbacks.add(callback);
-    return () => this.errorCallbacks.delete(callback);
-  }
-
-  public disconnect() {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+      this.ws.send(JSON.stringify(message));
+    } else {
+      console.warn('WebSocket is not connected');
     }
   }
 }
 
-export default WebSocketService; 
+export const wsService = new WebSocketService(); 
