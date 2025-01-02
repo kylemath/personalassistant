@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import json
 from .core.llm import LLMManager
+from .core.file_manager import FileManager
 
 app = FastAPI()
 
@@ -33,7 +34,10 @@ class CalendarEvent(BaseModel):
     description: Optional[str] = None
     calendar: str
 
+# Initialize managers
 llm_manager = LLMManager()
+file_manager = FileManager()
+llm_manager.register_file_manager(file_manager)
 
 class ConnectionManager:
     def __init__(self):

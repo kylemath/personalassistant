@@ -17,6 +17,7 @@ interface CalendarEvent {
 
 interface GroupedEvents {
   today: CalendarEvent[];
+  fortnite: CalendarEvent[];
   upcoming: CalendarEvent[];
 }
 
@@ -72,19 +73,23 @@ export const CalendarWidget: React.FC = () => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today);
+    const fortnite = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    fortnite.setDate(tomorrow.getDate() + 2);
 
     return filteredEvents.reduce(
       (groups, event) => {
         const eventDate = new Date(event.startTime);
         if (eventDate >= today && eventDate < tomorrow) {
           groups.today.push(event);
-        } else if (eventDate >= tomorrow) {
+        } else if (eventDate >= tomorrow && eventDate < fortnite) {
+            groups.fortnite.push(event);
+        } else if (eventDate >= fortnite) {
           groups.upcoming.push(event);
         }
         return groups;
       },
-      { today: [], upcoming: [] } as GroupedEvents
+      { today: [], fortnite: [], upcoming: [] } as GroupedEvents
     );
   };
 
@@ -96,17 +101,11 @@ export const CalendarWidget: React.FC = () => {
     
     // Format date
     let dateStr: string;
-    if (start.toDateString() === now.toDateString()) {
-      dateStr = `Today (${start.getDate()})`;
-    } else if (start.toDateString() === tomorrow.toDateString()) {
-      dateStr = `Tomorrow (${start.getDate()})`;
-    } else {
-      dateStr = start.toLocaleDateString('en-US', { 
-        weekday: 'short', 
-        month: 'short', 
-        day: 'numeric' 
-      });
-    }
+    dateStr = start.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
 
     // Format time
     const timeStr = start.toLocaleTimeString('en-US', { 
@@ -242,6 +241,21 @@ export const CalendarWidget: React.FC = () => {
                 groupedEvents.today.map(event => renderEventItem(event, minimizedEvents.has(event.id)))
               ) : (
                 <div className="no-events">No events today</div>
+              )}
+            </div>
+          </div>
+          <div className="event-group">
+            <h3>Tomorrow</h3>
+            <div className="event-list">
+              {isLoading ? (
+                <div className="event-item skeleton-loading">
+                  <div className="event-time"></div>
+                  <div className="event-title"></div>
+                </div>
+              ) : groupedEvents.fortnite.length > 0 ? (
+                groupedEvents.fortnite.map(event => renderEventItem(event, minimizedEvents.has(event.id)))
+              ) : (
+                <div className="no-events">No events tomorrow</div>
               )}
             </div>
           </div>

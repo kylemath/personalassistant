@@ -4,6 +4,7 @@ import { RootState } from '../../store';
 import { getCommandSuggestions, Command } from '../../utils/commands';
 import { wsService } from '../../services/websocket';
 import { ApiService } from '../../services/api';
+import { addMessage, setTyping, setError } from '../../store/slices/chatSlice';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -13,6 +14,7 @@ interface Message {
   id: string;
   text: string;
   sender: 'user' | 'assistant';
+  timestamp: number;
 }
 
 export const Chat: React.FC = () => {
@@ -38,20 +40,32 @@ export const Chat: React.FC = () => {
     const newMessage: Message = {
       id: uuidv4(),
       text: message,
-      sender: 'user'
+      sender: 'user',
+      timestamp: Date.now()
     };
 
-    // Add message to Redux store
-    // dispatch(addMessage(newMessage));
+    // Add user message to Redux store
+    dispatch(addMessage(newMessage));
 
     if (message.startsWith('/')) {
       wsService.sendMessage({ command: message });
     } else {
       try {
+        dispatch(setTyping(true));
         const response = await apiService.sendMessage(message);
-        // Handle response
+        
+        // Add assistant's response to Redux store
+        dispatch(addMessage({
+          id: uuidv4(),
+          text: response.response,
+          sender: 'assistant',
+          timestamp: Date.now()
+        }));
       } catch (error) {
         console.error('Error sending message:', error);
+        dispatch(setError('Failed to send message'));
+      } finally {
+        dispatch(setTyping(false));
       }
     }
 

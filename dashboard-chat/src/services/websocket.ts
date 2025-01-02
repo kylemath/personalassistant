@@ -1,5 +1,7 @@
 import { store } from '../store';
 import { addEvent, updateEvent, deleteEvent } from '../store/slices/calendarSlice';
+import { addMessage, setTyping } from '../store/slices/chatSlice';
+import { v4 as uuidv4 } from 'uuid';
 
 export class WebSocketService {
   private ws: WebSocket | null = null;
@@ -52,6 +54,15 @@ export class WebSocketService {
           default:
             console.warn('Unknown calendar action:', data.action);
         }
+      } else if (data.type === 'message') {
+        // Handle chat messages
+        store.dispatch(addMessage({
+          id: uuidv4(),
+          text: data.content,
+          sender: 'assistant',
+          timestamp: Date.now()
+        }));
+        store.dispatch(setTyping(false));
       }
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
