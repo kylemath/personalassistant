@@ -1,3 +1,6 @@
+# Secrets
+src/config/secrets.ts
+
 # Logs
 logs
 *.log
