@@ -268,7 +268,7 @@ class MemoryManager:
             )
         except Exception as e:
             print(f"Error adding long-term fact: {e}")
-
+    
     def get_recent_history(self, limit: int = 5) -> str:
         """Get recent conversation history."""
         try:
@@ -295,8 +295,8 @@ class MemoryManager:
             
         except Exception as e:
             print(f"Error getting recent history: {e}")
-            return ""
-
+        return ""
+    
     def add_conversation(self, user_message: str, assistant_response: str):
         """Add a conversation interaction."""
         interaction = {
@@ -304,7 +304,7 @@ class MemoryManager:
             'content': f"User: {user_message}\nAssistant: {assistant_response}"
         }
         self.add_interaction(interaction)
-
+    
     def get_personal_info(self, category: str = None) -> str:
         """Get stored personal information about the user."""
         try:
@@ -324,7 +324,7 @@ class MemoryManager:
         except Exception as e:
             print(f"Error getting personal info: {e}")
             return ""
-
+    
     def get_relevant_facts(self, query: str, limit: int = 3) -> str:
         """Get facts relevant to the current query."""
         try:
@@ -371,4 +371,4 @@ class MemoryManager:
             return True
         except Exception as e:
             print(f"Error deleting fact: {e}")
-            return False
+            return False 

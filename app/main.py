@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from app.core.llm import LLMManager
 from app.core.docs_generator import DocsGenerator
 from app.core.file_manager import FileManager
+from typing import List
 
 app = FastAPI()
 
@@ -14,6 +15,37 @@ file_manager = FileManager()
 
 # Pass file_manager to LLM manager
 llm.register_file_manager(file_manager)
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_message(self, message: str, websocket: WebSocket):
+        await websocket.send_json({"message": message})
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/chat")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            response = await llm.generate_response(data["message"])
+            await manager.send_message(response, websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
 
 # Update documentation on startup
 @app.on_event("startup")
@@ -58,7 +90,7 @@ async def chat_endpoint(chat_message: ChatMessage):
             "response": response
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/help")
 async def get_help():
