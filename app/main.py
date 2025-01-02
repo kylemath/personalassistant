@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from app.core.llm import LLMManager
 from app.core.docs_generator import DocsGenerator
@@ -8,6 +9,15 @@ from app.core.file_manager import FileManager
 from typing import List
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize managers
 llm = LLMManager()
@@ -32,6 +42,28 @@ class ConnectionManager:
         await websocket.send_json({"message": message})
 
 manager = ConnectionManager()
+
+class ChatMessage(BaseModel):
+    message: str
+    context: dict = {}  # For file context, etc.
+
+@app.get("/")
+async def root():
+    return FileResponse("app/static/index.html")
+
+@app.post("/chat")
+async def chat(chat_message: ChatMessage):
+    try:
+        response = await llm.generate_response(
+            chat_message.message,
+            context=chat_message.context
+        )
+        return {
+            "status": "success",
+            "response": response
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
@@ -63,34 +95,6 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Initialize docs generator for /help endpoint
 docs_generator = DocsGenerator()
-
-class ChatMessage(BaseModel):
-    message: str
-    context: dict = {}  # For file context, etc.
-
-@app.get("/")
-async def root():
-    return FileResponse("app/static/index.html")
-
-@app.post("/chat")
-async def chat(message: str):
-    response = await llm.generate_response(message)
-    return {"response": response}
-
-@app.post("/api/chat")
-async def chat_endpoint(chat_message: ChatMessage):
-    """Direct chat endpoint for IDE integration"""
-    try:
-        response = await llm.generate_response(
-            chat_message.message,
-            context=chat_message.context
-        )
-        return {
-            "status": "success",
-            "response": response
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/help")
 async def get_help():
