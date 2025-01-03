@@ -17,7 +17,7 @@ interface Message {
   timestamp: number;
 }
 
-export const Chat: React.FC = () => {
+const Chat: React.FC = () => {
   const [message, setMessage] = useState('');
   const [suggestions, setSuggestions] = useState<Command[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -34,6 +34,30 @@ export const Chat: React.FC = () => {
     }
   }, [messages]);
 
+  useEffect(() => {
+    // Set up WebSocket message handler
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        const response = {
+          id: uuidv4(),
+          text: typeof data === 'string' ? data : JSON.stringify(data, null, 2),
+          sender: 'assistant' as const,
+          timestamp: Date.now()
+        };
+        dispatch(addMessage(response));
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+
+    wsService.onMessage(handleWebSocketMessage);
+
+    return () => {
+      wsService.offMessage(handleWebSocketMessage);
+    };
+  }, [dispatch]);
+
   const handleSendMessage = async () => {
     if (!message.trim()) return;
 
@@ -48,6 +72,7 @@ export const Chat: React.FC = () => {
     dispatch(addMessage(newMessage));
 
     if (message.startsWith('/')) {
+      // Send command via WebSocket
       wsService.sendMessage({ command: message });
     } else {
       try {
@@ -214,4 +239,6 @@ export const Chat: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};
+
+export default Chat; 

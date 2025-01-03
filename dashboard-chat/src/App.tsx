@@ -1,18 +1,11 @@
-import { Chat } from './components/Chat/Chat';
-import { CalendarWidget } from './components/Dashboard/Calendar/CalendarWidget';
+import React from 'react';
+import Dashboard from './components/Dashboard/Dashboard';
 import './App.css';
 
 function App() {
   return (
-    <div className="dashboard">
-      <div className="dashboard-grid">
-        <div className="widget-container">
-          <CalendarWidget />
-        </div>
-      </div>
-      <div className="chat-wrapper">
-        <Chat />
-      </div>
+    <div className="app">
+      <Dashboard />
     </div>
   );
 }

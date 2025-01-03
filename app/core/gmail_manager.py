@@ -29,17 +29,24 @@ class GmailManager:
 
     def _authenticate(self):
         try:
+            print("Debug: Starting Gmail authentication")
             if os.path.exists(self.token_path):
+                print("Debug: Found existing token file")
                 with open(self.token_path, 'rb') as token:
                     self.creds = pickle.load(token)
+                print("Debug: Loaded credentials from token file")
             
             if not self.creds or not self.creds.valid:
+                print("Debug: Credentials invalid or missing")
                 if self.creds and self.creds.expired and self.creds.refresh_token:
+                    print("Debug: Refreshing expired credentials")
                     self.creds.refresh(Request())
                 else:
+                    print("Debug: Checking for credentials file")
                     if not os.path.exists(self.credentials_path):
                         raise FileNotFoundError(f"Credentials file not found at {self.credentials_path}")
                     
+                    print("Debug: Starting OAuth flow")
                     flow = InstalledAppFlow.from_client_secrets_file(
                         self.credentials_path, 
                         self.SCOPES
@@ -49,66 +56,76 @@ class GmailManager:
                         host='localhost',
                         success_message='Gmail authentication complete!'
                     )
+                    print("Debug: OAuth flow completed")
                 
+                print("Debug: Saving new token")
                 with open(self.token_path, 'wb') as token:
                     pickle.dump(self.creds, token)
 
+            print("Debug: Building Gmail service")
             self.service = build('gmail', 'v1', credentials=self.creds)
             print("Gmail authentication successful!")
         
         except Exception as e:
             print(f"Gmail authentication error: {str(e)}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             raise
 
-    def list_recent_emails(self, max_results=5, query=""):
-        """List recent emails with optional search query."""
+    def list_recent_emails(self, max_results=10, query=""):
+        """List recent emails from the inbox.
+        
+        Args:
+            max_results (int): Maximum number of emails to return
+            query (str): Optional query string to filter emails
+            
+        Returns:
+            list: List of email dictionaries containing id, from, subject, date, snippet
+        """
         try:
+            print("Debug: Fetching recent emails")
+            # Prepare the query
+            search_query = 'in:inbox ' + query
+            
+            # Get message list
             results = self.service.users().messages().list(
                 userId='me',
-                q=query,
-                maxResults=max_results
+                maxResults=max_results,
+                q=search_query
             ).execute()
-
+            
             messages = results.get('messages', [])
+            print(f"Debug: Found {len(messages)} messages")
+            
             emails = []
-
-            for message in messages:
-                msg = self.service.users().messages().get(
-                    userId='me', 
-                    id=message['id'],
-                    format='full'
+            for msg in messages:
+                # Get full message details
+                message = self.service.users().messages().get(
+                    userId='me',
+                    id=msg['id'],
+                    format='metadata',
+                    metadataHeaders=['From', 'Subject', 'Date']
                 ).execute()
-
-                headers = msg['payload']['headers']
-                subject = next(h['value'] for h in headers if h['name'] == 'Subject')
-                from_email = next(h['value'] for h in headers if h['name'] == 'From')
-                date = next(h['value'] for h in headers if h['name'] == 'Date')
-
-                # Get email body
-                if 'parts' in msg['payload']:
-                    parts = msg['payload']['parts']
-                    data = parts[0]['body'].get('data', '')
-                else:
-                    data = msg['payload']['body'].get('data', '')
                 
-                if data:
-                    text = base64.urlsafe_b64decode(data).decode()
-                else:
-                    text = "No content"
-
-                emails.append({
+                headers = message['payload']['headers']
+                email_data = {
                     'id': message['id'],
-                    'subject': subject,
-                    'from': from_email,
-                    'date': date,
-                    'snippet': msg['snippet'],
-                    'body': text
-                })
-
+                    'from': next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown'),
+                    'subject': next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject'),
+                    'date': next((h['value'] for h in headers if h['name'] == 'Date'), ''),
+                    'snippet': message.get('snippet', ''),
+                    'labels': message.get('labelIds', [])
+                }
+                emails.append(email_data)
+            
+            print(f"Debug: Processed {len(emails)} emails")
             return emails
-
+            
         except Exception as e:
-            print(f"Error listing emails: {e}")
+            print(f"Error listing recent emails: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             return []
 
     def send_email(self, to, subject, body):
@@ -270,6 +287,32 @@ class GmailManager:
             print(f"Error marking email as read: {e}")
             return False
 
+    def star_email(self, email_id):
+        """Star an email by adding the STARRED label."""
+        try:
+            self.service.users().messages().modify(
+                userId='me',
+                id=email_id,
+                body={'addLabelIds': ['STARRED']}
+            ).execute()
+            return True
+        except Exception as e:
+            print(f"Error starring email: {e}")
+            return False
+
+    def unstar_email(self, email_id):
+        """Unstar an email by removing the STARRED label."""
+        try:
+            self.service.users().messages().modify(
+                userId='me',
+                id=email_id,
+                body={'removeLabelIds': ['STARRED']}
+            ).execute()
+            return True
+        except Exception as e:
+            print(f"Error unstarring email: {e}")
+            return False
+
     def process_new_emails(self, handler_function, max_results=5):
         """Process new unread emails with a handler function.
         
@@ -373,12 +416,16 @@ class GmailManager:
                     ).execute().get('labelIds', [])
 
                     # Convert label IDs to names
-                    label_names = []
+                    label_names = ['STARRED']  # Always include STARRED label
                     label_list = self.service.users().labels().list(userId='me').execute()
                     for label_id in labels:
                         for label in label_list['labels']:
                             if label['id'] == label_id:
-                                if label['id'] not in ['STARRED', 'UNREAD', 'CATEGORY_PERSONAL', 'IMPORTANT']:
+                                # Include UNREAD label if present
+                                if label['id'] == 'UNREAD':
+                                    label_names.append('UNREAD')
+                                # Include other non-system labels
+                                elif label['id'] not in ['STARRED', 'CATEGORY_PERSONAL', 'IMPORTANT']:
                                     label_names.append(label['name'])
 
                     starred_emails.append({

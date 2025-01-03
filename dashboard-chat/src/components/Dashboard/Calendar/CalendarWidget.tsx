@@ -21,7 +21,11 @@ interface GroupedEvents {
   upcoming: CalendarEvent[];
 }
 
-export const CalendarWidget: React.FC = () => {
+interface Props {
+  onAddEvent: (message: string) => void;
+}
+
+const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
   const dispatch = useAppDispatch();
   const { events, isLoading, error } = useAppSelector((state: RootState) => state.calendar);
   const [minimizedEvents, setMinimizedEvents] = useState<Set<string>>(new Set());
@@ -137,11 +141,44 @@ export const CalendarWidget: React.FC = () => {
     fetchEvents();
   };
 
-  const handleAddEvent = () => {
-    wsService.sendMessage({
-      type: 'calendar',
-      action: 'request_add_event'
-    });
+  const handleAddEvent = async () => {
+    const button = document.querySelector('.widget-button') as HTMLButtonElement;
+    if (!button) return;
+
+    button.disabled = true;
+    button.innerHTML = `
+      <svg class="loading-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+        <circle cx="12" cy="12" r="10" />
+      </svg>
+      Adding...
+    `;
+
+    try {
+      // Show immediate feedback in chat
+      onAddEvent("I'll help you add a calendar event. Please describe the event in plain language, including when it should occur. For example:\n- 'Team meeting tomorrow at 2pm for 1 hour'\n- 'Lunch with John next Thursday at noon at Cafe Luigi'\n- 'Weekly standup every Monday at 9am'");
+
+      // Send command to backend
+      const response = await fetch('http://localhost:8000/command', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          command: '/calendar add'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to initiate event creation');
+      }
+    } catch (err) {
+      console.error("Error initiating event creation:", err);
+      onAddEvent("Sorry, I encountered an error while trying to add the event. Please try again.");
+    } finally {
+      // Reset button state
+      button.disabled = false;
+      button.innerHTML = `Add Event`;
+    }
   };
 
   const toggleEventMinimized = (eventId: string) => {
@@ -278,4 +315,6 @@ export const CalendarWidget: React.FC = () => {
       </div>
     </div>
   );
-}; 
+};
+
+export default CalendarWidget; 

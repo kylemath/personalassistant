@@ -130,7 +130,10 @@ class EmailHandler:
     def _handle_read(self, args: str) -> str:
         """Handle the read command"""
         try:
-            email_id = self._resolve_email_id(args)
+            parts = args.split()
+            email_id = self._resolve_email_id(parts[0])
+            keep_unread = len(parts) > 1 and parts[1] == "keep-unread"
+            
             if not email_id:
                 return "Please provide a valid email ID or number"
             
@@ -141,8 +144,9 @@ class EmailHandler:
             # Store context for reply
             self.current_email_context = email
             
-            # Mark as read when viewing
-            self.gmail.mark_as_read(email_id)
+            # Mark as read only if keep_unread is False
+            if not keep_unread:
+                self.gmail.mark_as_read(email_id)
             
             # Get unsubscribe link if available
             unsubscribe_link = self.gmail.get_unsubscribe_link(email_id)
