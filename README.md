@@ -62,6 +62,79 @@ A local AI assistant powered by Ollama that integrates with Google Calendar, Gma
    mkdir -p app/config
    ```
 
+## Configuration Setup
+
+Before running the application, you need to set up your configuration files. Example files are provided for all sensitive configurations:
+
+### 1. Google OAuth Credentials
+
+Copy `app/config/credentials.example.json` to `app/config/credentials.json` and fill in your Google OAuth credentials:
+
+```json
+{
+  "installed": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "project_id": "your-project-id",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "redirect_uris": ["http://localhost"]
+  }
+}
+```
+
+### 2. Calendar Configuration
+
+Copy `app/config/calendar_config.example.json` to `app/config/calendar_config.json` and update with your calendar settings:
+
+```json
+{
+  "calendars": {
+    "personal": "your.personal@gmail.com",
+    "work": "your.work@company.com"
+  },
+  "settings": {
+    "timezone": "America/Edmonton"
+  }
+}
+```
+
+### 3. Frontend Secrets
+
+Copy `dashboard-chat/src/config/secrets.example.ts` to `dashboard-chat/src/config/secrets.ts` and update with your configuration:
+
+```typescript
+export const CALENDAR_NAMES = {
+  PERSONAL: "your.personal@gmail.com",
+  WORK: "your.work@company.com",
+  // ... other calendars
+};
+
+// Calendar colors for visual distinction
+export const CALENDAR_COLORS = {
+  [CALENDAR_NAMES.PERSONAL]: "#007bff", // Blue
+  [CALENDAR_NAMES.WORK]: "#28a745", // Green
+  // ... other calendar colors
+};
+
+// Configure which calendars are visible by default
+export const CALENDAR_VISIBILITY = {
+  [CALENDAR_NAMES.PERSONAL]: true, // Show by default
+  [CALENDAR_NAMES.WORK]: false, // Hidden by default
+  // ... other calendar visibility settings
+};
+
+export const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY";
+```
+
+### 4. Environment Variables
+
+Copy `.env.example` to `.env` and update with your API keys:
+
+```bash
+VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+```
+
+Note: All example files are tracked in git, but the actual configuration files are gitignored. Never commit sensitive credentials to version control.
+
 ## Running the Application
 
 1. **Start Ollama**

@@ -1,5 +1,10 @@
 # Credentials and tokens
 app/config/credentials.json
+!app/config/credentials.example.json
+app/config/calendar_config.json
+!app/config/calendar_config.example.json
+dashboard-chat/src/config/secrets.ts
+!dashboard-chat/src/config/secrets.example.ts
 token.pickle
 gmail_token.pickle
 calendar_token.pickle

@@ -3,7 +3,7 @@ import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { RootState } from '../../../store';
 import { setEvents, setLoading, setError } from '../../../store/slices/calendarSlice';
 import { wsService } from '../../../services/websocket';
-import { CALENDAR_COLORS, CALENDAR_NAMES, GOOGLE_MAPS_API_KEY } from '../../../config/secrets';
+import { CALENDAR_COLORS, CALENDAR_NAMES, GOOGLE_MAPS_API_KEY, CALENDAR_VISIBILITY } from '../../../config/secrets';
 
 interface CalendarEvent {
   id: string;
@@ -29,7 +29,15 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
   const dispatch = useAppDispatch();
   const { events, isLoading, error } = useAppSelector((state: RootState) => state.calendar);
   const [minimizedEvents, setMinimizedEvents] = useState<Set<string>>(new Set());
-  const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
+  const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(() => {
+    const hidden = new Set<string>();
+    Object.entries(CALENDAR_VISIBILITY).forEach(([calendar, isVisible]) => {
+      if (!isVisible) {
+        hidden.add(calendar);
+      }
+    });
+    return hidden;
+  });
   const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
   const fetchEvents = useCallback(async () => {

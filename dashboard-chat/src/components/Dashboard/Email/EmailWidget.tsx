@@ -27,7 +27,7 @@ const EmailWidget: React.FC<Props> = ({ onDraftReply }) => {
   const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
   const [showUnread, setShowUnread] = useState(true);
   const [showStarred, setShowStarred] = useState(true);
-  const [showRead, setShowRead] = useState(true);
+  const [showRead, setShowRead] = useState(false);
   const [starredEmails, setStarredEmails] = useState<Email[]>([]);
   const [loadingStarred, setLoadingStarred] = useState(false);
 

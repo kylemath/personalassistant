@@ -1,0 +1,18 @@
+{
+  "calendars": {
+    "personal": "your.personal@gmail.com",
+    "work": "your.work@company.com",
+    "shared": "shared.calendar@gmail.com"
+  },
+  "default_calendar": "personal",
+  "calendar_colors": {
+    "personal": "#007bff",
+    "work": "#28a745",
+    "shared": "#20c997"
+  },
+  "settings": {
+    "max_results": 30,
+    "default_reminder_minutes": 30,
+    "timezone": "America/Edmonton"
+  }
+} 
