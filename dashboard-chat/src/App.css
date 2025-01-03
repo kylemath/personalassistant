@@ -334,11 +334,25 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none;
+}
+
+.event-location:hover {
+  color: #007bff;
+  transform: translateY(-1px);
+  text-decoration: underline;
 }
 
 .event-location::before {
   content: "📍";
   font-size: 0.875rem;
+  transition: transform 0.2s ease-in-out;
+}
+
+.event-location:hover::before {
+  transform: scale(1.2);
 }
 
 /* Calendar toggles */
@@ -984,5 +998,28 @@
   left: 0;
   width: 100%;
   height: 100%;
+  border: none;
+}
+
+.event-location-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.event-map {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 0.5rem;
+  transition: all 0.3s ease-in-out;
+}
+
+.event-map iframe {
+  display: block;
+  width: 100%;
+  height: 200px;
   border: none;
 }

@@ -12,7 +12,7 @@ export class WebSocketService {
   }
 
   private connect() {
-    this.ws = new WebSocket('ws://localhost:8000/ws');
+    this.ws = new WebSocket(`ws://${window.location.hostname}:8000/ws`);
     
     this.ws.onopen = () => {
       console.log('WebSocket connected');

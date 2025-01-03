@@ -9,7 +9,8 @@ credentials.json
 
 # Environment variables
 .env
-.env.*
+.env.local
+.env.*.local
 
 # Python
 __pycache__/

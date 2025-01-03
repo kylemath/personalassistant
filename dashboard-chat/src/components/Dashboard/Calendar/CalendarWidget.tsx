@@ -3,7 +3,7 @@ import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { RootState } from '../../../store';
 import { setEvents, setLoading, setError } from '../../../store/slices/calendarSlice';
 import { wsService } from '../../../services/websocket';
-import { CALENDAR_COLORS, CALENDAR_NAMES } from '../../../config/secrets';
+import { CALENDAR_COLORS, CALENDAR_NAMES, GOOGLE_MAPS_API_KEY } from '../../../config/secrets';
 
 interface CalendarEvent {
   id: string;
@@ -30,6 +30,7 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
   const { events, isLoading, error } = useAppSelector((state: RootState) => state.calendar);
   const [minimizedEvents, setMinimizedEvents] = useState<Set<string>>(new Set());
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(new Set());
 
   const fetchEvents = useCallback(async () => {
     try {
@@ -193,26 +194,62 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
     });
   };
 
-  const renderEventItem = (event: CalendarEvent, isMinimized: boolean) => {
-    const { date, time } = formatEventTime(event.startTime, event.endTime);
-    const style = { '--calendar-color': getCalendarColor(event.calendar) } as React.CSSProperties;
+  const handleLocationClick = (e: React.MouseEvent, eventId: string, location: string) => {
+    e.stopPropagation();
+    setExpandedLocations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId);
+      } else {
+        newSet.add(eventId);
+      }
+      return newSet;
+    });
+  };
+
+  const renderEvent = (event: CalendarEvent) => {
+    const isMinimized = minimizedEvents.has(event.id);
+    const isLocationExpanded = expandedLocations.has(event.id);
+    const eventDate = new Date(event.startTime);
+    const endDate = event.endTime ? new Date(event.endTime) : null;
 
     return (
-      <div 
-        key={event.id} 
+      <div
+        key={event.id}
         className={`event-item ${isMinimized ? 'minimized' : ''}`}
-        style={style}
-        onClick={() => toggleEventMinimized(event.id)}
+        style={{ '--calendar-color': getCalendarColor(event.calendar) } as React.CSSProperties}
+        onClick={() => handleEventClick(event.id)}
       >
         <div className="event-datetime">
-          <div className="event-date">{date}</div>
-          <div className="event-time">{time}</div>
+          <span className="event-date">{formatDate(eventDate)}</span>
+          <span className="event-time">{formatTime(eventDate)}{endDate && ` - ${formatTime(endDate)}`}</span>
         </div>
         <div className="event-details">
-          <div className="event-title">
-            {event.title}
-          </div>
-          {!isMinimized && event.location && <div className="event-location">{event.location}</div>}
+          <div className="event-title">{event.title}</div>
+          {event.location && (
+            <div className="event-location-container">
+              <div 
+                className="event-location"
+                onClick={(e) => handleLocationClick(e, event.id, event.location!)}
+              >
+                {event.location}
+              </div>
+              {isLocationExpanded && (
+                <div className="event-map">
+                  <iframe
+                    title={`Map for ${event.title}`}
+                    width="100%"
+                    height="200"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    allowFullScreen
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAPS_API_KEY}&q=${encodeURIComponent(event.location)}`}
+                  ></iframe>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -249,6 +286,34 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
     return CALENDAR_COLORS[calendarName as keyof typeof CALENDAR_COLORS] || '#007bff';
   };
 
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (date: Date): string => {
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const handleEventClick = (eventId: string) => {
+    setMinimizedEvents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId);
+      } else {
+        newSet.add(eventId);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="widget calendar-widget">
       <div className="widget-header">
@@ -275,7 +340,7 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
                   <div className="event-title"></div>
                 </div>
               ) : groupedEvents.today.length > 0 ? (
-                groupedEvents.today.map(event => renderEventItem(event, minimizedEvents.has(event.id)))
+                groupedEvents.today.map(event => renderEvent(event))
               ) : (
                 <div className="no-events">No events today</div>
               )}
@@ -290,7 +355,7 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
                   <div className="event-title"></div>
                 </div>
               ) : groupedEvents.fortnite.length > 0 ? (
-                groupedEvents.fortnite.map(event => renderEventItem(event, minimizedEvents.has(event.id)))
+                groupedEvents.fortnite.map(event => renderEvent(event))
               ) : (
                 <div className="no-events">No events tomorrow</div>
               )}
@@ -305,7 +370,7 @@ const CalendarWidget: React.FC<Props> = ({ onAddEvent }) => {
                   <div className="event-title"></div>
                 </div>
               ) : groupedEvents.upcoming.length > 0 ? (
-                groupedEvents.upcoming.map(event => renderEventItem(event, minimizedEvents.has(event.id)))
+                groupedEvents.upcoming.map(event => renderEvent(event))
               ) : (
                 <div className="no-events">No upcoming events</div>
               )}

@@ -11,12 +11,14 @@ interface Email {
 
 interface EmailState {
   emails: Email[];
+  starredEmails: Email[];
   loading: boolean;
   error: string | null;
 }
 
 const initialState: EmailState = {
   emails: [],
+  starredEmails: [],
   loading: false,
   error: null
 };
@@ -27,6 +29,9 @@ const emailSlice = createSlice({
   reducers: {
     setEmails: (state, action: PayloadAction<Email[]>) => {
       state.emails = action.payload;
+    },
+    setStarredEmails: (state, action: PayloadAction<Email[]>) => {
+      state.starredEmails = action.payload;
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.loading = action.payload;
@@ -39,19 +44,29 @@ const emailSlice = createSlice({
       if (email) {
         email.labels = email.labels.filter(label => label !== 'UNREAD');
       }
+      // Also update in starred emails if present
+      const starredEmail = state.starredEmails.find(e => e.id === action.payload);
+      if (starredEmail) {
+        starredEmail.labels = starredEmail.labels.filter(label => label !== 'UNREAD');
+      }
     },
     toggleEmailStar: (state, action: PayloadAction<string>) => {
-      const email = state.emails.find(e => e.id === action.payload);
-      if (email) {
-        if (email.labels.includes('STARRED')) {
-          email.labels = email.labels.filter(label => label !== 'STARRED');
-        } else {
-          email.labels.push('STARRED');
+      const updateEmailLabels = (email: Email | undefined) => {
+        if (email) {
+          if (email.labels.includes('STARRED')) {
+            email.labels = email.labels.filter(label => label !== 'STARRED');
+          } else {
+            email.labels.push('STARRED');
+          }
         }
-      }
+      };
+
+      // Update in both lists
+      updateEmailLabels(state.emails.find(e => e.id === action.payload));
+      updateEmailLabels(state.starredEmails.find(e => e.id === action.payload));
     }
   }
 });
 
-export const { setEmails, setLoading, setError, markEmailAsRead, toggleEmailStar } = emailSlice.actions;
+export const { setEmails, setStarredEmails, setLoading, setError, markEmailAsRead, toggleEmailStar } = emailSlice.actions;
 export default emailSlice.reducer; 

@@ -13,7 +13,6 @@ A local AI assistant powered by Ollama that integrates with Google Calendar, Gma
 1. **Install Ollama**
 
    ```bash
-
    brew install ollama
    ```
 
@@ -38,7 +37,9 @@ A local AI assistant powered by Ollama that integrates with Google Calendar, Gma
 
    ```bash
    python -m venv venv
-
+   source venv/bin/activate  # On Unix/macOS
+   # or
+   .\venv\Scripts\activate  # On Windows
    ```
 
 5. **Install dependencies**
@@ -63,18 +64,51 @@ A local AI assistant powered by Ollama that integrates with Google Calendar, Gma
 
 ## Running the Application
 
-2. **Start Ollama**
+1. **Start Ollama**
 
    ```bash
    ollama serve
    ```
 
-3. **In a new terminal Start the web server**
+2. **Start the backend server**
+
    ```bash
    source venv/bin/activate
+   # For local access only:
    uvicorn app.main:app --reload
+   # For network access:
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-The application will be available at `http://localhost:8000`. Use the help button (?) or press 'h' to see available commands.
+3. **Start the frontend server**
+   ```bash
+   cd dashboard-chat
+   npm install
+   npm run dev
+   ```
 
-##
+The application will be available at:
+
+- Local access: `http://localhost:5173`
+- Network access: `http://<your-ip>:5173`
+
+Use the help button (?) or press 'h' to see available commands.
+
+## Network Access
+
+To access the application from other devices on your local network:
+
+1. Find your computer's IP address:
+
+   ```bash
+   # On macOS/Linux
+   ifconfig | grep "inet "
+   # On Windows
+   ipconfig
+   ```
+
+2. On other devices, access the application at:
+   - Frontend: `http://<your-ip>:5173`
+   - Backend API: `http://<your-ip>:8000`
+
+Note: Make sure your firewall settings allow incoming connections on ports 5173 and 8000.
