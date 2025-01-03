@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setEmails, setLoading, setError, markEmailAsRead, toggleEmailStar } from '../../../store/slices/emailSlice';
 import { RootState } from '../../../store/store';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { tomorrow } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface Email {
   id: string;
@@ -9,6 +12,7 @@ interface Email {
   subject: string;
   date: string;
   snippet: string;
+  body?: string;
   labels: string[];
 }
 
@@ -53,7 +57,33 @@ const EmailWidget: React.FC<Props> = ({ onDraftReply }) => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      setStarredEmails(data.emails);
+      
+      // Map over starred emails and fetch their content
+      const starredWithContent = await Promise.all(
+        data.emails.map(async (email: Email) => {
+          try {
+            const contentResponse = await fetch(`http://localhost:8000/api/emails/${email.id}/content`, {
+              method: 'GET',
+              headers: {
+                'Accept': 'text/html',
+              },
+            });
+            if (contentResponse.ok) {
+              const contentData = await contentResponse.json();
+              return {
+                ...email,
+                body: contentData.html || contentData.body
+              };
+            }
+            return email;
+          } catch (err) {
+            console.error(`Error fetching content for email ${email.id}:`, err);
+            return email;
+          }
+        })
+      );
+      
+      setStarredEmails(starredWithContent);
     } catch (err) {
       console.error("Error fetching starred emails:", err);
     } finally {
@@ -216,12 +246,91 @@ const EmailWidget: React.FC<Props> = ({ onDraftReply }) => {
     }
   };
 
-  const handleEmailClick = (emailId: string) => {
-    setExpandedEmailId(expandedEmailId === emailId ? null : emailId);
+  const handleEmailClick = async (emailId: string) => {
+    // If we're closing the email, just close it
+    if (expandedEmailId === emailId) {
+      setExpandedEmailId(null);
+      return;
+    }
+
+    // Otherwise, fetch the full email content
+    try {
+      const response = await fetch(`http://localhost:8000/api/emails/${emailId}/content`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/html',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch email content');
+      }
+
+      const data = await response.json();
+      
+      // Update the email in our list with the full body
+      const updatedEmails = emails.map(email => {
+        if (email.id === emailId) {
+          return {
+            ...email,
+            body: data.html || data.body // Use HTML content if available, fall back to plain text
+          };
+        }
+        return email;
+      });
+      dispatch(setEmails(updatedEmails));
+      setExpandedEmailId(emailId);
+    } catch (err) {
+      console.error("Error fetching email content:", err);
+      // Still expand the email to show the snippet if full content fetch fails
+      setExpandedEmailId(emailId);
+    }
   };
 
   const handleOpenInGmail = (emailId: string) => {
     window.open(`https://mail.google.com/mail/u/0/#inbox/${emailId}`, '_blank');
+  };
+
+  const processHtmlContent = (html: string): string => {
+    // Create a temporary div to parse the HTML
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    
+    // Find all links and add target="_blank" and rel="noopener noreferrer"
+    const links = div.getElementsByTagName('a');
+    for (let i = 0; i < links.length; i++) {
+      const link = links[i];
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
+      
+      // Check if this is a YouTube link
+      const url = link.href;
+      const youtubeRegex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+      const match = url.match(youtubeRegex);
+      
+      if (match && match[1]) {
+        const videoId = match[1];
+        // Create an iframe for the YouTube embed
+        const iframe = document.createElement('div');
+        iframe.innerHTML = `
+          <div class="youtube-embed">
+            <iframe 
+              width="560" 
+              height="315" 
+              src="https://www.youtube.com/embed/${videoId}" 
+              frameborder="0" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+              allowfullscreen
+            ></iframe>
+          </div>
+        `;
+        // Replace the link with the iframe
+        link.parentNode?.insertBefore(iframe.firstElementChild!, link);
+        link.remove();
+      }
+    }
+    
+    return div.innerHTML;
   };
 
   const renderEmailItem = (email: Email) => {
@@ -282,8 +391,15 @@ const EmailWidget: React.FC<Props> = ({ onDraftReply }) => {
               <div className="email-from-full">
                 <strong>From:</strong> {fromName} {fromEmail && `<${fromEmail}>`}
               </div>
-              <div className="email-snippet">
-                {email.snippet}
+              <div className="email-body">
+                {email.body ? (
+                  <div 
+                    dangerouslySetInnerHTML={{ __html: processHtmlContent(email.body) }} 
+                    className="email-body-content"
+                  />
+                ) : (
+                  <div className="email-loading">Loading email content...</div>
+                )}
               </div>
             </div>
             <div className="email-actions">

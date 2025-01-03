@@ -11,6 +11,7 @@ import pickle
 import requests
 from urllib.parse import urlparse
 import re
+import html
 
 class GmailManager:
     SCOPES = [
@@ -700,60 +701,73 @@ class GmailManager:
         except Exception as e:
             return f"Failed to access unsubscribe URL: {url}\nError: {str(e)}"
 
-    def get_email(self, email_id: str) -> dict:
-        """Get full email content by ID."""
+    def get_email(self, email_id: str, include_html: bool = False) -> dict:
+        """Get an email by ID.
+        
+        Args:
+            email_id: The ID of the email to get
+            include_html: Whether to include HTML content in the response
+        """
         try:
-            # Get the full message
+            # Get the email message
             message = self.service.users().messages().get(
                 userId='me',
                 id=email_id,
                 format='full'
             ).execute()
-            
-            # Extract headers
+
+            # Get headers
             headers = message['payload']['headers']
-            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-            from_email = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
-            date = next((h['value'] for h in headers if h['name'] == 'Date'), '')
-            
+            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+            from_email = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown Sender')
+            date = next((h['value'] for h in headers if h['name'].lower() == 'date'), '')
+
             # Get labels
-            labels = self.service.users().messages().get(
-                userId='me',
-                id=email_id,
-                format='metadata',
-                metadataHeaders=['labelIds']
-            ).execute().get('labelIds', [])
-            
-            # Convert label IDs to names
-            label_names = []
-            label_list = self.service.users().labels().list(userId='me').execute()
-            for label_id in labels:
-                for label in label_list['labels']:
-                    if label['id'] == label_id:
-                        if label['id'] not in ['STARRED', 'UNREAD', 'CATEGORY_PERSONAL', 'IMPORTANT']:
-                            label_names.append(label['name'])
-            
-            # Extract body
-            body = ''
+            label_ids = message.get('labelIds', [])
+            label_names = [label_id for label_id in label_ids]
+
+            # Extract body (both plain text and HTML if requested)
+            plain_text = ''
+            html_content = ''
+
+            def get_body_from_part(part):
+                if 'data' in part['body']:
+                    return base64.urlsafe_b64decode(part['body']['data']).decode()
+                return ''
+
             if 'parts' in message['payload']:
                 for part in message['payload']['parts']:
-                    if part['mimeType'] == 'text/plain':
-                        body = base64.urlsafe_b64decode(part['body']['data']).decode()
-                        break
+                    mime_type = part['mimeType']
+                    if mime_type == 'text/plain':
+                        plain_text = get_body_from_part(part)
+                    elif include_html and mime_type == 'text/html':
+                        html_content = get_body_from_part(part)
             else:
                 # Handle messages without parts
-                if 'data' in message['payload']['body']:
-                    body = base64.urlsafe_b64decode(message['payload']['body']['data']).decode()
-            
-            return {
+                mime_type = message['payload'].get('mimeType', '')
+                if mime_type == 'text/plain':
+                    plain_text = get_body_from_part(message['payload'])
+                elif include_html and mime_type == 'text/html':
+                    html_content = get_body_from_part(message['payload'])
+
+            # If we requested HTML but didn't find any, convert plain text to HTML
+            if include_html and not html_content and plain_text:
+                html_content = f"<pre style='white-space: pre-wrap; font-family: inherit;'>{html.escape(plain_text)}</pre>"
+
+            result = {
                 'id': email_id,
                 'subject': subject,
                 'from': from_email,
                 'date': date,
-                'body': body,
+                'body': plain_text,
                 'labels': label_names,
                 'snippet': message.get('snippet', '')
             }
+
+            if include_html:
+                result['html'] = html_content or plain_text
+
+            return result
             
         except Exception as e:
             print(f"Error getting email: {e}")

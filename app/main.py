@@ -250,3 +250,14 @@ async def read_email(email_id: str):
         return {"email": email}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+
+@app.get("/api/emails/{email_id}/content")
+async def get_email_content(email_id: str):
+    """Get the full content of an email, including HTML."""
+    try:
+        email = llm_manager.gmail.get_email(email_id, include_html=True)
+        if not email:
+            raise HTTPException(status_code=404, detail="Email not found")
+        return email
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 
